@@ -1,0 +1,28 @@
+TRABAJO PROGRAMACION ANALITICA
+
+Leer el documento donde se especifica el trabajo a realizar
+
+Este es el resumen del dataset
+
+* TIPO DE PROBLEMA: REGRESION O CLASIFICACION
+
+
+* DESCRIPCION:
+Este conjunto de datos se construyó con el propósito de ayudar a los estudiantes
+ a poner en una lista de las universidades segun los resultados del estudiante. 
+El resultado previsto les da una idea justa acerca de sus posibilidades para ser
+admitiddos en una universidad en particular.
+
+
+* DATOS:
+ 1. GRE Scores ( 0 a 340 ) 
+2. TOEFL Scores ( 0 a 120 ) 
+3. University Rating ( 0 a 5 ) 
+4. Statement of Purpose and Letter of Recommendation Strength ( 0 a 5 ) 
+5. Undergraduate GPA ( 0 a 10 ) 
+6. Research Experience ( puede ser 0 o 1 ) 
+
+
+* DATOS DE SALIDA:
+7. Chance of Admit ( 0 a 1 )
+

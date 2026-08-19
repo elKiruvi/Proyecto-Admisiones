@@ -130,3 +130,6 @@ out/
 
 # Spyder
 .spyproject/
+
+# Local Gentle AI artifacts
+.atl/

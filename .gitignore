@@ -133,3 +133,6 @@ out/
 
 # Local Gentle AI artifacts
 .atl/
+
+# Issue #2 intermediate dataset
+!data/02_intermediate/Admission_Predict.parquet

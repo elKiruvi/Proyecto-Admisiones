@@ -98,6 +98,13 @@ def test_non_numeric_values_are_rejected() -> None:
         build_feature_frame(features)
 
 
+def test_bool_values_are_rejected_as_non_numeric() -> None:
+    features = {**VALID_FEATURES, "CGPA": True}
+
+    with pytest.raises(TypeError, match="must be numeric"):
+        build_feature_frame(features)
+
+
 def test_non_integral_score_is_rejected() -> None:
     features = {**VALID_FEATURES, "GRE Score": 316.5}
 

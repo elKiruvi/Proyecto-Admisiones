@@ -74,6 +74,40 @@ Example to install [plotly](https://plotly.com/python/) in dev group:
 uv add --group dev plotly
 ```
 
+## Admissions Demo
+
+The Issue #8/#14 demo requirement provides a local Streamlit form for the
+fitted admissions model. The application uses the existing Pipeline artifact
+without retraining or changing the model:
+
+```text
+models/05_model_selection_pipeline.joblib
+```
+
+The artifact-compatible runtime uses Python 3.12 with NumPy 2.5.2, pandas
+3.0.5, scikit-learn 1.9.0, and joblib 1.5.3.
+
+From the repository root, install the locked environment and launch the local
+form:
+
+```bash
+uv sync --locked
+uv run streamlit run src/inference/streamlit_app.py
+```
+
+Open the local URL printed by Streamlit, normally
+`http://localhost:8501`. The form accepts GRE Score, TOEFL Score, University
+Rating, SOP, LOR, CGPA, and Research. Prediction occurs only after submitting
+the form.
+
+The displayed result is a raw `LinearRegression` estimate. It is not a
+calibrated probability, is not converted to a percentage, and is not clipped
+to `[0, 1]`. Continuous values outside the observed training range are
+accepted and may represent extrapolation.
+
+For the assignment evidence, run the local application and attach a
+screenshot of the completed form and prediction to the pull request or issue.
+
 ## 🗃️ Project structure
 
 - [Data structure]

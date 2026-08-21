@@ -2,13 +2,31 @@
 
 from __future__ import annotations
 
-import streamlit as st
+import sys
+from pathlib import Path
 
-from src.pipelines.inference_pipeline.inference import load_model, predict_admission
+import streamlit as st
+from sklearn.pipeline import Pipeline
+
+
+def _ensure_source_root_on_path() -> None:
+    """Make the src-layout packages importable when Streamlit runs this file."""
+    source_root = Path(__file__).resolve().parents[1]
+    source_root_string = str(source_root)
+    if source_root_string not in sys.path:
+        sys.path.insert(0, source_root_string)
+
+
+_ensure_source_root_on_path()
+
+from pipelines.inference_pipeline.inference import (  # noqa: E402
+    load_model,
+    predict_admission,
+)
 
 
 @st.cache_resource
-def get_model():
+def get_model() -> Pipeline:
     """Load the immutable fitted Pipeline once per Streamlit process."""
     return load_model()
 

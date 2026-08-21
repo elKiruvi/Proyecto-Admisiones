@@ -7,4 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a Streamlit admissions demo for the Issue #8/#14 demo requirement,
+  using the existing fitted inference Pipeline with local execution
+  instructions.
+
 ## [Released]

@@ -24,6 +24,11 @@ FEATURE_COLUMNS: tuple[str, ...] = (
 )
 MODEL_FILENAME = "05_model_selection_pipeline.joblib"
 INTEGER_FEATURES = frozenset({"GRE Score", "TOEFL Score"})
+CONTINUOUS_RANGES: dict[str, tuple[float, float]] = {
+    "GRE Score": (0.0, 340.0),
+    "TOEFL Score": (0.0, 120.0),
+    "CGPA": (0.0, 10.0),
+}
 CATEGORICAL_DOMAINS: dict[str, frozenset[float]] = {
     "University Rating": frozenset({1.0, 2.0, 3.0, 4.0, 5.0}),
     "SOP": frozenset({1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0}),
@@ -77,6 +82,27 @@ def load_model(model_path: Path | None = None) -> Pipeline:
     return loaded_model
 
 
+def _validate_feature_value(feature_name: str, value: object) -> None:
+    """Validate one feature value without applying model preprocessing."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise TypeError(f"{feature_name} must be numeric.")
+
+    numeric_value = float(value)
+    if not np.isfinite(numeric_value):
+        raise ValueError(f"{feature_name} must be finite.")
+    if feature_name in INTEGER_FEATURES and not numeric_value.is_integer():
+        raise ValueError(f"{feature_name} must be an integer.")
+    if feature_name in CONTINUOUS_RANGES:
+        lower_bound, upper_bound = CONTINUOUS_RANGES[feature_name]
+        if not lower_bound <= numeric_value <= upper_bound:
+            raise ValueError(f"{feature_name} must be between {lower_bound:g} and {upper_bound:g}.")
+    if (
+        feature_name in CATEGORICAL_DOMAINS
+        and numeric_value not in CATEGORICAL_DOMAINS[feature_name]
+    ):
+        raise ValueError(f"{feature_name} is outside the supported categorical domain.")
+
+
 def validate_features(features: Mapping[str, object]) -> None:
     """Validate the input schema without applying model preprocessing."""
     expected_fields = set(FEATURE_COLUMNS)
@@ -92,20 +118,7 @@ def validate_features(features: Mapping[str, object]) -> None:
         raise ValueError("Invalid feature fields (" + "; ".join(details) + ").")
 
     for feature_name in FEATURE_COLUMNS:
-        value = features[feature_name]
-        if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
-            raise TypeError(f"{feature_name} must be numeric.")
-
-        numeric_value = float(value)
-        if not np.isfinite(numeric_value):
-            raise ValueError(f"{feature_name} must be finite.")
-        if feature_name in INTEGER_FEATURES and not numeric_value.is_integer():
-            raise ValueError(f"{feature_name} must be an integer.")
-        if (
-            feature_name in CATEGORICAL_DOMAINS
-            and numeric_value not in CATEGORICAL_DOMAINS[feature_name]
-        ):
-            raise ValueError(f"{feature_name} is outside the supported categorical domain.")
+        _validate_feature_value(feature_name, features[feature_name])
 
 
 def build_feature_frame(features: Mapping[str, object]) -> pd.DataFrame:

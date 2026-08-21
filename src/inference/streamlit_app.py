@@ -38,8 +38,12 @@ st.write(
 )
 
 with st.form("admissions_prediction_form"):
-    gre_score = st.number_input("GRE Score", value=316, step=1, format="%d")
-    toefl_score = st.number_input("TOEFL Score", value=107, step=1, format="%d")
+    gre_score = st.number_input(
+        "GRE Score", min_value=0, max_value=340, value=316, step=1, format="%d"
+    )
+    toefl_score = st.number_input(
+        "TOEFL Score", min_value=0, max_value=120, value=107, step=1, format="%d"
+    )
     university_rating = st.selectbox("University Rating", options=[1, 2, 3, 4, 5], index=2)
     sop = st.selectbox(
         "SOP",
@@ -51,7 +55,9 @@ with st.form("admissions_prediction_form"):
         options=[1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0],
         index=4,
     )
-    cgpa = st.number_input("CGPA", value=8.62, step=0.01, format="%.2f")
+    cgpa = st.number_input(
+        "CGPA", min_value=0.0, max_value=10.0, value=8.62, step=0.01, format="%.2f"
+    )
     research_label = st.selectbox("Research", options=["No", "Yes"])
     submitted = st.form_submit_button("Predict")
 

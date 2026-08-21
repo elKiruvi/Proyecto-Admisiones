@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from pipelines.inference_pipeline.inference import (
+    CATEGORICAL_DOMAINS,
     FEATURE_COLUMNS,
     build_feature_frame,
     load_model,
@@ -63,9 +64,15 @@ def test_missing_or_unexpected_fields_are_rejected(
 @pytest.mark.parametrize(
     "field,value",
     [
+        ("University Rating", -1),
         ("University Rating", 6),
+        ("SOP", -0.5),
+        ("SOP", 5.5),
         ("SOP", 3.25),
-        ("LOR", 0.0),
+        ("LOR", -0.5),
+        ("LOR", 5.5),
+        ("LOR", 3.25),
+        ("Research", -1),
         ("Research", 2),
     ],
 )
@@ -98,14 +105,55 @@ def test_non_integral_score_is_rejected() -> None:
         build_feature_frame(features)
 
 
-def test_valid_continuous_values_outside_observed_range_are_accepted() -> None:
-    features = {**VALID_FEATURES, "GRE Score": 0, "TOEFL Score": 0, "CGPA": 0.0}
+@pytest.mark.parametrize(
+    "field,values",
+    [
+        ("GRE Score", [0, 340]),
+        ("TOEFL Score", [0, 120]),
+        ("CGPA", [0.0, 10.0]),
+        ("University Rating", [1, 5]),
+        ("SOP", [1.0, 5.0]),
+        ("LOR", [1.0, 5.0]),
+        ("Research", [0, 1]),
+    ],
+)
+def test_valid_boundary_values_are_accepted(field: str, values: list[object]) -> None:
+    for value in values:
+        features = {**VALID_FEATURES, field: value}
+        build_feature_frame(features)
 
-    frame = build_feature_frame(features)
 
-    assert frame.loc[0, "GRE Score"] == 0
-    assert frame.loc[0, "TOEFL Score"] == 0
-    assert frame.loc[0, "CGPA"] == 0.0
+def test_categorical_domains_match_the_serialized_pipeline() -> None:
+    model = load_model()
+    ordinal_transformer = model.named_steps["preprocessor"].named_transformers_["ordinal"]
+    encoder = ordinal_transformer.named_steps["encoder"]
+    fitted_domains = dict(
+        zip(
+            ("University Rating", "SOP", "LOR"),
+            (frozenset(map(float, categories)) for categories in encoder.categories_),
+            strict=True,
+        )
+    )
+
+    assert {field: CATEGORICAL_DOMAINS[field] for field in fitted_domains} == fitted_domains
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("GRE Score", -1),
+        ("GRE Score", 341),
+        ("TOEFL Score", -1),
+        ("TOEFL Score", 121),
+        ("CGPA", -0.01),
+        ("CGPA", 10.01),
+    ],
+)
+def test_continuous_values_outside_project_range_are_rejected(field: str, value: object) -> None:
+    features = {**VALID_FEATURES, field: value}
+
+    with pytest.raises(ValueError, match="must be between"):
+        build_feature_frame(features)
 
 
 def test_inference_calls_predict_but_never_fit() -> None:

@@ -1,9 +1,9 @@
 [project]
-name = "template-data-science-container"
+name = "proyecto-admisiones"
 version = "0.1.0"
-description = "Template for data science and AI Projects with the last stable version of python and devcontainer"
+description = "Supervised regression of graduate-school admission probability (Chance of Admit)"
 authors = [
-    "Jose R. Zapata <joserzapata.github.io>",
+    "Samuel Cardona Ochoa",
 ]
 requires-python = ">=3.12"
 readme = "README.md"
@@ -17,8 +17,7 @@ dependencies = [
 ]
 
 [project.urls]
-documentation = "https://.github.io/template-data-science-container"
-repository = "https://github.com//template-data-science-container"
+repository = "https://github.com/elKiruvi/Proyecto-Admisiones"
 
 
 [dependency-groups]
@@ -36,7 +35,6 @@ dev = [
 package = false
 default-groups = [
     "dev",
-#
 ]
 
 [build-system]

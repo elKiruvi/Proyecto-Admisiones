@@ -772,6 +772,45 @@ wheels = [
 ]
 
 [[package]]
+name = "proyecto-admisiones"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "joblib" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "scikit-learn" },
+    { name = "streamlit" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "cruft", extra = ["pyproject"] },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cookies" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "joblib", specifier = "==1.5.3" },
+    { name = "numpy", specifier = "==2.5.2" },
+    { name = "pandas", specifier = "==3.0.5" },
+    { name = "scikit-learn", specifier = "==1.9.0" },
+    { name = "streamlit", specifier = "==1.62.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "cruft", extras = ["pyproject"], specifier = ">=2.16.0" },
+    { name = "pre-commit", specifier = ">=4.6.1" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-cookies", specifier = ">=0.7.0" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+]
+
+[[package]]
 name = "pyarrow"
 version = "25.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1229,45 +1268,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/50/94/928c44a8b7bcd602fc4a16025e9868bcdb88b92bcdb2e53dec188d034fc4/streamlit-1.62.0.tar.gz", hash = "sha256:9d2571da6e6799cbaf0f59548f5773926260a87a69807cf3e2f0f68f9f5e4d45", size = 9883501, upload-time = "2026-08-19T18:31:22.864Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/57/78864764c53885db8a378cc1c47329b4b6e095f7ebd89cd1ffcca4027c89/streamlit-1.62.0-py3-none-any.whl", hash = "sha256:294dbcfe0d6531b0d8593a095e6872dcc6ec4b731723fbb318a0f8102e69162e", size = 10490146, upload-time = "2026-08-19T18:31:19.957Z" },
-]
-
-[[package]]
-name = "template-data-science-container"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "joblib" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "scikit-learn" },
-    { name = "streamlit" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "cruft", extra = ["pyproject"] },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cookies" },
-    { name = "pytest-cov" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "joblib", specifier = "==1.5.3" },
-    { name = "numpy", specifier = "==2.5.2" },
-    { name = "pandas", specifier = "==3.0.5" },
-    { name = "scikit-learn", specifier = "==1.9.0" },
-    { name = "streamlit", specifier = "==1.62.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "cruft", extras = ["pyproject"], specifier = ">=2.16.0" },
-    { name = "pre-commit", specifier = ">=4.6.1" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-cookies", specifier = ">=0.7.0" },
-    { name = "pytest-cov", specifier = ">=7.1.0" },
 ]
 
 [[package]]

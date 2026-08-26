@@ -9,8 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added a Streamlit admissions demo for the Issue #8/#14 demo requirement,
-  using the existing fitted inference Pipeline with local execution
-  instructions.
-
-## [Released]
+- Issue #1: problem-understanding notebook and RAW admissions dataset.
+- Issue #2: typed intermediate Parquet with normalized column names and null representation.
+- Issue #3: univariate, bivariate and multivariate EDA notebooks.
+- Issue #4: feature-engineering notebook with deduplication, train/test split and scikit-learn preprocessing.
+- Issue #5: baseline notebook (DummyRegressor mean + CGPA band heuristic).
+- Issue #6: model-selection notebook with nested CV, statistical tests and the serialized LinearRegression Pipeline artifact.
+- Issue #7: model-interpretation notebook (coefficients, VIF, permutation importance, error analysis).
+- Issue #8: Streamlit admissions demo using the fitted Pipeline with local execution instructions.

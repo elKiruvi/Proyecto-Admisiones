@@ -50,7 +50,7 @@ implemented, if any. -->
 
 <!-- Run locally before requesting review. CI must be green before merge. -->
 
-- [ ] `uvx pre-commit run --all-files --show-diff-on-failure --color=always`
+- [ ] `uv run pre-commit run --all-files --show-diff-on-failure --color=always`
 - [ ] `uv run pytest --cov --cov-branch --cov-fail-under=60`
 - [ ] CI green on this PR
 

@@ -17,7 +17,7 @@ assignees: ''
 
 ## ✅ Acceptance criteria
 
-- [ ] ...
+<!-- Add concrete, verifiable acceptance criteria here. -->
 
 ## 🚧 Out of scope
 

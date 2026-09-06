@@ -232,8 +232,8 @@ def _ks_statistic(train_values: np.ndarray, test_values: np.ndarray) -> float:
     on the sorted union of observed values, which matches the KS definition
     for discrete distributions.
     """
-    train_values = np.asarray(train_values, dtype=float)
-    test_values = np.asarray(test_values, dtype=float)
+    train_values = pd.Series(train_values, dtype="Float64").to_numpy(dtype=float, na_value=np.nan)
+    test_values = pd.Series(test_values, dtype="Float64").to_numpy(dtype=float, na_value=np.nan)
     train_values = train_values[~np.isnan(train_values)]
     test_values = test_values[~np.isnan(test_values)]
     n_train, n_test = len(train_values), len(test_values)

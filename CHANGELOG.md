@@ -17,3 +17,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue #6: model-selection notebook with nested CV, statistical tests and the serialized LinearRegression Pipeline artifact.
 - Issue #7: model-interpretation notebook (coefficients, VIF, permutation importance, error analysis).
 - Issue #8: Streamlit admissions demo using the fitted Pipeline with local execution instructions.
+- Issue #29: standalone feature pipeline script (RAW to deduplicated typed feature set persisted as Parquet) with unit tests.

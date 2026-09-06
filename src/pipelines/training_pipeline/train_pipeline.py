@@ -324,9 +324,22 @@ def _check_size_ratio(n_test: int, total_rows: int) -> list[str]:
 
 
 def _check_schema_parity(X_train: pd.DataFrame, X_test: pd.DataFrame) -> list[str]:
-    """Require identical feature columns, order and dtypes in both partitions."""
+    """Require identical feature columns, order and dtypes in both partitions.
+
+    Duplicate labels are detected before any column access: indexing a
+    duplicated label returns a DataFrame, so ``.dtype`` would fail with an
+    incidental exception instead of the aggregated
+    :class:`TrainTestValidationError`.
+    """
+    failures: list[str] = []
+    if not X_train.columns.is_unique:
+        failures.append("train has duplicate feature column(s)")
+    if not X_test.columns.is_unique:
+        failures.append("test has duplicate feature column(s)")
     if list(X_train.columns) != list(X_test.columns):
-        return ["train and test feature columns differ"]
+        failures.append("train and test feature columns differ")
+    if failures:
+        return failures
 
     dtype_mismatches = [
         column
@@ -656,7 +669,9 @@ def run_training_pipeline(
     6. evaluate train and test with the final refit model;
     7. serialize the artifact and the metrics report.
 
-    The test set is excluded from fitting and model selection but is inspected by the pre-fit split-validation step.
+    The test set is inspected by the pre-fit split validation but is
+    excluded from fitting, model selection and cross-validation; it
+    participates only in the final evaluation.
     """
     features_df = read_features(features_path)
     X_train, X_test, y_train, y_test = split_features(features_df)

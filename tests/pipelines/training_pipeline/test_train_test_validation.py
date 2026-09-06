@@ -179,6 +179,15 @@ def test_duplicated_categorical_column_raises_schema_error_not_incidental() -> N
         validate_train_test_split(X_train, X_test_duplicated, y_train, y_test)
 
 
+def test_duplicated_column_in_both_partitions_raises_schema_error_not_attribute_error() -> None:
+    X_train, X_test, y_train, y_test = split_features(build_balanced_frame())
+    X_train_duplicated = pd.concat([X_train, X_train[["University Rating"]]], axis=1)
+    X_test_duplicated = pd.concat([X_test, X_test[["University Rating"]]], axis=1)
+
+    with pytest.raises(TrainTestValidationError, match="duplicate feature column"):
+        validate_train_test_split(X_train_duplicated, X_test_duplicated, y_train, y_test)
+
+
 def test_feature_target_length_misalignment_raises() -> None:
     X_train, X_test, y_train, y_test = split_features(build_balanced_frame())
 

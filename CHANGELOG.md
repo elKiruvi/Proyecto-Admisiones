@@ -18,3 +18,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue #7: model-interpretation notebook (coefficients, VIF, permutation importance, error analysis).
 - Issue #8: Streamlit admissions demo using the fitted Pipeline with local execution instructions.
 - Issue #29: standalone feature pipeline script (RAW to deduplicated typed feature set persisted as Parquet) with unit tests.
+- Issue #30: data validation and integrity rules in the feature pipeline (schema, dtypes, ranges, categories, null tolerance, structural integrity) with unit tests.

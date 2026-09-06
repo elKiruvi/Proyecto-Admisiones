@@ -1,5 +1,6 @@
 """Unit tests for the Graduate Admissions feature pipeline."""
 
+from io import StringIO
 from pathlib import Path
 
 import numpy as np
@@ -42,6 +43,15 @@ SYNTHETIC_CSV_ROWS = [
     "316,107,3,3.5,3.0,8.62,1,0.72",
     "298,,2,2.0,2.5,7.90,0,0.55",
     "   ,95,1,1.5,2.0,7.20,1,0.48",
+    "322,115,4,4.5,4.5,9.10,1,0.85",
+    "305,100,2,2.5,3.0,7.95,0,0.62",
+    "330,118,5,4.0,4.0,9.40,1,0.91",
+    "312,103,3,3.0,3.5,8.45,1,0.71",
+    "295,98,2,2.0,2.0,7.60,0,0.52",
+    "318,110,4,3.5,4.0,8.80,1,0.79",
+    "302,97,1,2.0,2.5,7.45,0,0.49",
+    "326,116,5,4.5,5.0,9.25,1,0.88",
+    "310,105,3,3.0,3.0,8.30,1,0.68",
 ]
 
 SYNTHETIC_ROW_COUNT = len(SYNTHETIC_CSV_ROWS) - SYNTHETIC_CSV_HEADER_ROW_COUNT
@@ -55,43 +65,13 @@ def write_synthetic_raw_csv(path: Path) -> Path:
 
 
 def build_synthetic_feature_frame() -> pd.DataFrame:
-    """Return a small typed frame in the normalized RAW schema."""
-    rows = [
-        {
-            "GRE Score": 316,
-            "TOEFL Score": 107,
-            "University Rating": 3,
-            "SOP": 3.5,
-            "LOR": 3.0,
-            "CGPA": 8.62,
-            "Research": 1,
-            "Chance of Admit": 0.72,
-        },
-        {
-            "GRE Score": 298,
-            "TOEFL Score": None,
-            "University Rating": 2,
-            "SOP": 2.0,
-            "LOR": 2.5,
-            "CGPA": 7.90,
-            "Research": 0,
-            "Chance of Admit": 0.55,
-        },
-        {
-            "GRE Score": None,
-            "TOEFL Score": 95,
-            "University Rating": 1,
-            "SOP": 1.5,
-            "LOR": 2.0,
-            "CGPA": 7.20,
-            "Research": 1,
-            "Chance of Admit": 0.48,
-        },
-    ]
-    frame = pd.DataFrame(rows)
+    """Return a typed frame in the normalized RAW schema derived from the CSV fixture."""
+    frame = pd.read_csv(StringIO("\n".join(SYNTHETIC_CSV_ROWS)))
+    frame.columns = frame.columns.str.strip()
+    frame = frame.replace(r"^\s*$", np.nan, regex=True)
     frame[list(INTEGER_COLUMNS)] = frame[list(INTEGER_COLUMNS)].astype("Int64")
     frame[list(FLOAT_COLUMNS)] = frame[list(FLOAT_COLUMNS)].astype("float64")
-    return frame
+    return frame.drop_duplicates().reset_index(drop=True)
 
 
 def test_find_repository_root_resolves_from_module_location() -> None:

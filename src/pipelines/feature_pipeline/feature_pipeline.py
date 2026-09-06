@@ -1,12 +1,42 @@
 """Feature pipeline for the Graduate Admissions project.
 
 The pipeline reads the immutable RAW dataset, normalizes its representation,
-removes exact duplicates and persists the curated feature set consumed by the
-downstream training pipeline.
+removes exact duplicates, validates data quality and integrity, and persists
+the curated feature set consumed by the downstream training pipeline.
 
 No transformation is fitted in this module. Imputation, encoding and scaling
 are defined by :func:`build_preprocessor` but fitted only inside the training
 pipeline, within each cross-validation fold, to prevent data leakage.
+
+Validation contract (Issue #30)
+-------------------------------
+
+:func:`validate_features` runs before persistence and enforces fixed rules:
+
+- schema: exactly the feature columns plus the target, with no extras;
+- dtypes: integer columns use an integer dtype, float columns a float dtype;
+- ranges (documented specification domains): GRE Score 0-340, TOEFL Score
+  0-120, CGPA 0-10, Chance of Admit 0-1;
+- categories (effective pipeline contract, matching the OrdinalEncoder
+  categories): University Rating {1..5}, SOP/LOR {1.0..5.0 in 0.5 steps},
+  Research {0, 1};
+- null tolerance: at most 10% nulls per feature column and 0% for the target;
+- integrity: a non-empty frame without duplicate rows after deduplication.
+
+The 10% null threshold is a fixed, reproducible quality rule defined from the
+project contract and the historically observed data (maximum observed null
+fraction after deduplication is ~6.2% for Research); it is NOT a parameter
+learned from the data at runtime. The target must be complete because the
+pipeline never drops rows and supervised training requires a label per row.
+
+Rules deliberately NOT applicable to this dataset:
+
+- date formats: there is no date column;
+- key uniqueness: rows are anonymous candidates with no natural primary key;
+- cross-dataset relations: the pipeline consumes a single dataset.
+
+A validation failure raises :class:`FeatureValidationError` and blocks
+persistence: the output artifact is neither created nor overwritten.
 """
 
 from __future__ import annotations
@@ -52,6 +82,38 @@ ORDINAL_CATEGORIES: list[list[float]] = [
     [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0],
     [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0],
 ]
+
+FEATURE_MAX_NULL_FRACTION = 0.10
+TARGET_MAX_NULL_FRACTION = 0.0
+
+MAX_NULL_FRACTION: dict[str, float] = {
+    **{column: FEATURE_MAX_NULL_FRACTION for column in FEATURE_COLUMNS},
+    TARGET_COLUMN: TARGET_MAX_NULL_FRACTION,
+}
+
+CONTINUOUS_RANGES: dict[str, tuple[float, float]] = {
+    "GRE Score": (0.0, 340.0),
+    "TOEFL Score": (0.0, 120.0),
+    "CGPA": (0.0, 10.0),
+    TARGET_COLUMN: (0.0, 1.0),
+}
+
+UNIVERSITY_RATING_CATEGORIES = frozenset({1.0, 2.0, 3.0, 4.0, 5.0})
+RATING_HALF_STEP_CATEGORIES = frozenset({1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0})
+BINARY_CATEGORIES = frozenset({0.0, 1.0})
+
+CATEGORICAL_DOMAINS: dict[str, frozenset[float]] = {
+    "University Rating": UNIVERSITY_RATING_CATEGORIES,
+    "SOP": RATING_HALF_STEP_CATEGORIES,
+    "LOR": RATING_HALF_STEP_CATEGORIES,
+    "Research": BINARY_CATEGORIES,
+}
+
+OFFENDING_VALUE_SAMPLE_LIMIT = 5
+
+
+class FeatureValidationError(ValueError):
+    """Raised when the curated feature set fails data quality or integrity rules."""
 
 
 def find_repository_root(start: Path | None = None) -> Path:
@@ -110,6 +172,112 @@ def build_features(raw_df: pd.DataFrame) -> pd.DataFrame:
     return raw_df.drop_duplicates().loc[:, [*FEATURE_COLUMNS, TARGET_COLUMN]].reset_index(drop=True)
 
 
+def _check_schema(features_df: pd.DataFrame) -> list[str]:
+    """Return failures about unexpected columns and column dtypes."""
+    failures: list[str] = []
+    expected_columns = [*FEATURE_COLUMNS, TARGET_COLUMN]
+    actual_columns = list(features_df.columns)
+    missing_columns = [column for column in expected_columns if column not in actual_columns]
+    unexpected_columns = [column for column in actual_columns if column not in expected_columns]
+    if missing_columns or unexpected_columns:
+        details = []
+        if missing_columns:
+            details.append(f"missing columns: {missing_columns}")
+        if unexpected_columns:
+            details.append(f"unexpected columns: {unexpected_columns}")
+        failures.append("Schema: " + "; ".join(details) + ".")
+
+    for column in INTEGER_COLUMNS:
+        if column in features_df.columns and not pd.api.types.is_integer_dtype(
+            features_df[column].dtype
+        ):
+            failures.append(f"{column}: expected integer dtype, found {features_df[column].dtype}.")
+    for column in FLOAT_COLUMNS:
+        if column in features_df.columns and not pd.api.types.is_float_dtype(
+            features_df[column].dtype
+        ):
+            failures.append(f"{column}: expected float dtype, found {features_df[column].dtype}.")
+    return failures
+
+
+def _check_null_fractions(features_df: pd.DataFrame) -> list[str]:
+    """Return failures about columns whose null fraction exceeds its contract."""
+    failures: list[str] = []
+    for column, max_fraction in MAX_NULL_FRACTION.items():
+        if column not in features_df.columns:
+            continue
+        null_fraction = float(features_df[column].isna().mean())
+        if null_fraction > max_fraction:
+            failures.append(
+                f"{column}: null fraction {null_fraction:.2%} exceeds maximum {max_fraction:.0%}."
+            )
+    return failures
+
+
+def _check_ranges(features_df: pd.DataFrame) -> list[str]:
+    """Return failures about values outside their documented specification range."""
+    failures: list[str] = []
+    for column, (lower_bound, upper_bound) in CONTINUOUS_RANGES.items():
+        if column not in features_df.columns:
+            continue
+        values = features_df[column].dropna()
+        outside = values[(values < lower_bound) | (values > upper_bound)]
+        if outside.empty:
+            continue
+        sample = sorted(set(outside.tolist()))[:OFFENDING_VALUE_SAMPLE_LIMIT]
+        failures.append(
+            f"{column}: values {sample} outside range [{lower_bound:g}, {upper_bound:g}]."
+        )
+    return failures
+
+
+def _check_categories(features_df: pd.DataFrame) -> list[str]:
+    """Return failures about values outside their effective categorical domain."""
+    failures: list[str] = []
+    for column, allowed_categories in CATEGORICAL_DOMAINS.items():
+        if column not in features_df.columns:
+            continue
+        values = features_df[column].dropna()
+        outside = values[~values.isin(allowed_categories)]
+        if outside.empty:
+            continue
+        sample = sorted(set(outside.tolist()))[:OFFENDING_VALUE_SAMPLE_LIMIT]
+        failures.append(
+            f"{column}: values {sample} outside allowed categories {sorted(allowed_categories)}."
+        )
+    return failures
+
+
+def _check_integrity(features_df: pd.DataFrame) -> list[str]:
+    """Return failures about the structural invariants of the curated frame."""
+    failures: list[str] = []
+    if features_df.empty:
+        failures.append("Integrity: feature frame is empty.")
+    duplicate_count = int(features_df.duplicated().sum())
+    if duplicate_count:
+        failures.append(f"Integrity: found {duplicate_count} duplicated rows.")
+    return failures
+
+
+def validate_features(features_df: pd.DataFrame) -> None:
+    """Validate data quality and integrity rules; raise on any failure.
+
+    Validation runs after structural cleaning and deduplication and before
+    persistence. All failures are collected so one call reports every issue.
+    """
+    failures = [
+        *_check_schema(features_df),
+        *_check_null_fractions(features_df),
+        *_check_ranges(features_df),
+        *_check_categories(features_df),
+        *_check_integrity(features_df),
+    ]
+    if failures:
+        header = f"Feature validation failed with {len(failures)} issue(s):"
+        details = "\n".join(f"- {failure}" for failure in failures)
+        raise FeatureValidationError(f"{header}\n{details}")
+
+
 def build_preprocessor() -> ColumnTransformer:
     """Build the unfitted Issue #4 preprocessing transformer.
 
@@ -153,6 +321,7 @@ def run_feature_pipeline(
     """Run the feature pipeline end to end and return the output path."""
     raw_df = read_raw_data(raw_path)
     features_df = build_features(raw_df)
+    validate_features(features_df)
     return persist_features(features_df, output_path or default_feature_output_path())
 
 
@@ -161,10 +330,12 @@ def main() -> None:
     raw_path = default_raw_path()
     raw_df = read_raw_data(raw_path)
     features_df = build_features(raw_df)
+    validate_features(features_df)
     output_path = persist_features(features_df, default_feature_output_path())
 
     print(f"RAW dataset: {raw_path} ({raw_df.shape[0]} rows)")
     print(f"Duplicate rows removed: {raw_df.shape[0] - features_df.shape[0]}")
+    print(f"Validation passed: {features_df.shape[0]} valid rows")
     print(f"Feature set persisted to: {output_path} ({features_df.shape})")
 
 

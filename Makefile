@@ -17,15 +17,6 @@ init_git: ## Initialize git repository
 	git commit -m "🎉 Initial commit"
 	@echo "🚀 Local Git already set!"
 
-####----Install Libraries----####
-
-install_data_libs: ## Install pandas, scikit-learn, Jupyter, seaborn
-	@echo "🚀 Installing data science libraries..."
-	uv add "pandas[parquet]" numpy scipy scikit-learn
-	@echo "🚀 Installing Jupyter, matplotlib and seaborn in dev..."
-	uv add jupyter matplotlib seaborn --group dev
-
-
 ####----Tests----####
 test: ## Test the code with pytest and coverage
 	@echo "🚀 Testing code: Running pytest"

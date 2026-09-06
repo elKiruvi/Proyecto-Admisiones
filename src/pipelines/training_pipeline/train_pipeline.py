@@ -140,6 +140,22 @@ class CrossValidationMetrics(TypedDict):
     r2_std: float
 
 
+class RmseGapDiagnosticEntry(TypedDict):
+    """One RMSE gap compared explicitly against fold variability."""
+
+    gap: float
+    within_fold_variability: bool
+
+
+class RmseGapDiagnostics(TypedDict):
+    """Explicit over/underfitting signal for each RMSE gap vs fold std."""
+
+    rule: str
+    reference_rmse_std: float
+    train_minus_cv_rmse: RmseGapDiagnosticEntry
+    test_minus_cv_rmse: RmseGapDiagnosticEntry
+
+
 class MetricsReport(TypedDict):
     """Deterministic training evidence report persisted next to the artifact."""
 
@@ -152,6 +168,7 @@ class MetricsReport(TypedDict):
     cv: CrossValidationMetrics
     test: dict[str, float]
     gaps: dict[str, float]
+    gap_diagnostics: RmseGapDiagnostics
     split_validation: TrainTestValidationReport
 
 
@@ -609,6 +626,47 @@ def cross_validate_model(
     }
 
 
+def _gap_is_within_fold_variability(gap: float, rmse_std: float) -> bool:
+    """Return whether an RMSE gap magnitude is within fold variability.
+
+    The comparison is by magnitude only (no division), so a zero std
+    needs no special case: only a zero gap is within zero variability.
+    """
+    return bool(abs(gap) <= rmse_std)
+
+
+def _fold_variability_verdict(entry: RmseGapDiagnosticEntry) -> str:
+    """Return the human-readable verdict for one gap diagnostic entry."""
+    return (
+        "within fold variability"
+        if entry["within_fold_variability"]
+        else "EXCEEDS fold variability"
+    )
+
+
+def build_gap_diagnostics(
+    train_metrics: dict[str, float],
+    cv_metrics: CrossValidationMetrics,
+    test_metrics: dict[str, float],
+) -> RmseGapDiagnostics:
+    """Build the explicit per-gap fold-variability diagnostic."""
+    rmse_std = cv_metrics["rmse_std"]
+    train_gap = train_metrics["rmse"] - cv_metrics["rmse_mean"]
+    test_gap = test_metrics["rmse"] - cv_metrics["rmse_mean"]
+    return {
+        "rule": "abs(gap) <= rmse_std",
+        "reference_rmse_std": rmse_std,
+        "train_minus_cv_rmse": {
+            "gap": train_gap,
+            "within_fold_variability": _gap_is_within_fold_variability(train_gap, rmse_std),
+        },
+        "test_minus_cv_rmse": {
+            "gap": test_gap,
+            "within_fold_variability": _gap_is_within_fold_variability(test_gap, rmse_std),
+        },
+    }
+
+
 def build_metrics_report(
     train_metrics: dict[str, float],
     cv_metrics: CrossValidationMetrics,
@@ -633,6 +691,7 @@ def build_metrics_report(
             "train_minus_cv_rmse": train_metrics["rmse"] - cv_metrics["rmse_mean"],
             "test_minus_cv_rmse": test_metrics["rmse"] - cv_metrics["rmse_mean"],
         },
+        "gap_diagnostics": build_gap_diagnostics(train_metrics, cv_metrics, test_metrics),
         "split_validation": split_validation,
     }
 
@@ -708,6 +767,9 @@ def main() -> None:
     cv_metrics = report["cv"]
     test_metrics = report["test"]
     gaps = report["gaps"]
+    gap_diagnostics = report["gap_diagnostics"]
+    train_verdict = _fold_variability_verdict(gap_diagnostics["train_minus_cv_rmse"])
+    test_verdict = _fold_variability_verdict(gap_diagnostics["test_minus_cv_rmse"])
 
     print(f"Model: {report['model']}")
     print(
@@ -736,10 +798,10 @@ def main() -> None:
         f"Test metrics: RMSE {test_metrics['rmse']:.6f} | "
         f"MAE {test_metrics['mae']:.6f} | R2 {test_metrics['r2']:.6f}"
     )
+    print(f"RMSE gaps vs fold RMSE std {gap_diagnostics['reference_rmse_std']:.6f}:")
     print(
-        f"RMSE gaps: train-CV {gaps['train_minus_cv_rmse']:+.6f} | "
-        f"test-CV {gaps['test_minus_cv_rmse']:+.6f} "
-        f"(fold RMSE std {cv_metrics['rmse_std']:.6f})"
+        f"  train-CV {gaps['train_minus_cv_rmse']:+.6f} ({train_verdict}) | "
+        f"test-CV {gaps['test_minus_cv_rmse']:+.6f} ({test_verdict})"
     )
     print(f"Model artifact: {output['model_path']}")
     print(f"Metrics report: {output['metrics_path']}")

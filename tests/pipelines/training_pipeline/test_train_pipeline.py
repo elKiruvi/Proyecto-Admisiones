@@ -18,6 +18,8 @@ from pipelines.training_pipeline.train_pipeline import (
     TARGET_COLUMN,
     CrossValidationMetrics,
     TrainTestValidationReport,
+    _gap_is_within_fold_variability,
+    build_gap_diagnostics,
     build_metrics_report,
     build_model_pipeline,
     cross_validate_model,
@@ -347,6 +349,80 @@ def test_build_metrics_report_contains_expected_structure_and_gaps() -> None:
     assert report["gaps"]["test_minus_cv_rmse"] == pytest.approx(0.14 - 0.12)
 
 
+def test_gap_smaller_than_std_is_within_fold_variability() -> None:
+    assert _gap_is_within_fold_variability(-0.019, 0.02) is True
+
+
+def test_gap_larger_than_std_exceeds_fold_variability() -> None:
+    assert _gap_is_within_fold_variability(0.03, 0.02) is False
+
+
+def test_gap_equal_to_std_is_within_fold_variability() -> None:
+    assert _gap_is_within_fold_variability(0.02, 0.02) is True
+
+
+def test_zero_std_is_handled_without_division() -> None:
+    assert _gap_is_within_fold_variability(0.0, 0.0) is True
+    assert _gap_is_within_fold_variability(0.01, 0.0) is False
+
+
+def test_build_gap_diagnostics_compares_both_gaps_against_fold_std() -> None:
+    train_metrics = {"rmse": 0.1, "mae": 0.08, "r2": 0.9}
+    cv_metrics: CrossValidationMetrics = {
+        "folds": [{"rmse": 0.12, "mae": 0.09, "r2": 0.88}],
+        "rmse_mean": 0.12,
+        "rmse_std": 0.01,
+        "mae_mean": 0.09,
+        "mae_std": 0.005,
+        "r2_mean": 0.88,
+        "r2_std": 0.02,
+    }
+    test_metrics = {"rmse": 0.14, "mae": 0.10, "r2": 0.85}
+
+    diagnostics = build_gap_diagnostics(train_metrics, cv_metrics, test_metrics)
+
+    assert diagnostics["rule"] == "abs(gap) <= rmse_std"
+    assert diagnostics["reference_rmse_std"] == pytest.approx(0.01)
+    assert diagnostics["train_minus_cv_rmse"]["gap"] == pytest.approx(-0.02)
+    assert diagnostics["train_minus_cv_rmse"]["within_fold_variability"] is False
+    assert diagnostics["test_minus_cv_rmse"]["gap"] == pytest.approx(0.02)
+    assert diagnostics["test_minus_cv_rmse"]["within_fold_variability"] is False
+
+
+def test_build_metrics_report_includes_gap_diagnostics() -> None:
+    train_metrics = {"rmse": 0.1, "mae": 0.08, "r2": 0.9}
+    cv_metrics: CrossValidationMetrics = {
+        "folds": [{"rmse": 0.12, "mae": 0.09, "r2": 0.88}],
+        "rmse_mean": 0.12,
+        "rmse_std": 0.01,
+        "mae_mean": 0.09,
+        "mae_std": 0.005,
+        "r2_mean": 0.88,
+        "r2_std": 0.02,
+    }
+    test_metrics = {"rmse": 0.14, "mae": 0.10, "r2": 0.85}
+
+    report = build_metrics_report(
+        train_metrics,
+        cv_metrics,
+        test_metrics,
+        build_split_validation_report(),
+    )
+
+    assert report["gap_diagnostics"]["reference_rmse_std"] == pytest.approx(0.01)
+    assert report["gap_diagnostics"]["rule"] == "abs(gap) <= rmse_std"
+    assert (
+        report["gap_diagnostics"]["train_minus_cv_rmse"]["gap"]
+        == report["gaps"]["train_minus_cv_rmse"]
+    )
+    assert (
+        report["gap_diagnostics"]["test_minus_cv_rmse"]["gap"]
+        == report["gaps"]["test_minus_cv_rmse"]
+    )
+    assert report["gap_diagnostics"]["train_minus_cv_rmse"]["within_fold_variability"] is False
+    assert report["gap_diagnostics"]["test_minus_cv_rmse"]["within_fold_variability"] is False
+
+
 def test_run_training_pipeline_end_to_end(tmp_path: Path) -> None:
     frame = build_synthetic_feature_frame()
     features_path = persist_synthetic_features(frame, tmp_path / "features.parquet")
@@ -367,6 +443,11 @@ def test_run_training_pipeline_end_to_end(tmp_path: Path) -> None:
         "train": TRAIN_ROW_COUNT,
         "test": TEST_ROW_COUNT,
     }
+    assert output["report"]["gap_diagnostics"]["reference_rmse_std"] == pytest.approx(
+        output["report"]["cv"]["rmse_std"]
+    )
+    with metrics_path.open(encoding="utf-8") as handle:
+        assert "gap_diagnostics" in json.load(handle)
 
     reloaded = joblib.load(model_path)
     _, X_test, _, _ = split_features(frame)

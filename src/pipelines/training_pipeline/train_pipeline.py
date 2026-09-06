@@ -266,8 +266,40 @@ def _check_index_integrity(X_train: pd.DataFrame, X_test: pd.DataFrame) -> list[
     return failures
 
 
+def _columns_are_unique_and_equal(X_train: pd.DataFrame, X_test: pd.DataFrame) -> bool:
+    """Return whether both partitions share the same unique column labels."""
+    return (
+        X_train.columns.is_unique
+        and X_test.columns.is_unique
+        and list(X_train.columns) == list(X_test.columns)
+    )
+
+
+def _column_is_indexable(X_train: pd.DataFrame, X_test: pd.DataFrame, column: str) -> bool:
+    """Return whether ``column`` yields a Series in both partitions.
+
+    A missing label raises ``KeyError`` and a duplicated label returns a
+    DataFrame; both conditions are reported by the schema-parity check
+    instead of being re-indexed here.
+    """
+    return (
+        column in X_train.columns
+        and column in X_test.columns
+        and list(X_train.columns).count(column) == 1
+        and list(X_test.columns).count(column) == 1
+    )
+
+
 def _check_cross_partition_duplicates(X_train: pd.DataFrame, X_test: pd.DataFrame) -> list[str]:
-    """Require that no identical feature row appears in both partitions."""
+    """Require that no identical feature row appears in both partitions.
+
+    Skipped when the column labels differ or repeat between partitions:
+    the schema-parity check already reports that condition and row-wise
+    comparison is only defined for identical unique schemas.
+    """
+    if not _columns_are_unique_and_equal(X_train, X_test):
+        return []
+
     combined = pd.concat([X_train, X_test], keys=["train", "test"], names=["partition", None])
     duplicate_mask = combined.duplicated(keep=False)
     if not duplicate_mask.any():
@@ -328,9 +360,17 @@ def _check_target_completeness(y_train: pd.Series, y_test: pd.Series) -> list[st
 
 
 def _check_no_new_categories(X_train: pd.DataFrame, X_test: pd.DataFrame) -> list[str]:
-    """Require ordinal/binary test values to be a subset of train values."""
+    """Require ordinal/binary test values to be a subset of train values.
+
+    Columns that are missing or duplicated in either partition are
+    skipped: the schema-parity check already reported them, so indexing
+    them here must never raise an incidental exception instead of the
+    aggregated :class:`TrainTestValidationError`.
+    """
     failures: list[str] = []
     for column in CATEGORICAL_SPLIT_FEATURES:
+        if not _column_is_indexable(X_train, X_test, column):
+            continue
         train_values = set(X_train[column].dropna().unique())
         test_values = set(X_test[column].dropna().unique())
         new_values = sorted(test_values - train_values)

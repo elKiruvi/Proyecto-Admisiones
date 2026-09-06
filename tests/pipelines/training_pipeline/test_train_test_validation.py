@@ -163,6 +163,22 @@ def test_schema_mismatch_dtype_divergence_raises() -> None:
         validate_train_test_split(X_train, X_test_dtype, y_train, y_test)
 
 
+def test_missing_categorical_column_raises_schema_error_not_key_error() -> None:
+    X_train, X_test, y_train, y_test = split_features(build_balanced_frame())
+    X_test_missing = X_test.drop(columns=["University Rating"])
+
+    with pytest.raises(TrainTestValidationError, match="columns differ"):
+        validate_train_test_split(X_train, X_test_missing, y_train, y_test)
+
+
+def test_duplicated_categorical_column_raises_schema_error_not_incidental() -> None:
+    X_train, X_test, y_train, y_test = split_features(build_balanced_frame())
+    X_test_duplicated = pd.concat([X_test, X_test[["University Rating"]]], axis=1)
+
+    with pytest.raises(TrainTestValidationError, match="columns differ"):
+        validate_train_test_split(X_train, X_test_duplicated, y_train, y_test)
+
+
 def test_feature_target_length_misalignment_raises() -> None:
     X_train, X_test, y_train, y_test = split_features(build_balanced_frame())
 

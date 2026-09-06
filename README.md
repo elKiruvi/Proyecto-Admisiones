@@ -48,16 +48,20 @@ Template for notebooks                       | [Notebook template] |
     make install_env
     ```
 
+    This installs the runtime dependencies, the development tooling and the
+    notebook libraries (Jupyter, matplotlib, seaborn, scipy, pyarrow), all
+    declared in `pyproject.toml`.
+
 1. Activate virtual environment:
 
     ```bash
     source .venv/bin/activate
     ```
 
-1. Install libraries for data science and machine learning:
+1. Launch Jupyter to open the project notebooks:
 
     ```bash
-    make install_data_libs
+    uv run jupyter lab
     ```
 
 ## Install dependencies

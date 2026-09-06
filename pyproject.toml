@@ -27,6 +27,12 @@ dev = [
     "pytest-cookies>=0.7.0",
     "pytest-cov>=7.1.0",
     "cruft[pyproject]>=2.16.0",# Automated Cookiecutter template synchronization
+    "jupyter>=1.0", # Notebooks execution environment
+    "ipykernel>=6.29", # Python kernel for the notebooks
+    "matplotlib>=3.10", # EDA and model diagnostics plots
+    "seaborn>=0.13", # Statistical visualizations
+    "scipy>=1.14", # Statistical tests imported directly by notebooks
+    "pyarrow>=18", # Parquet schema imported directly by notebook 02.1
 ]
 
 #

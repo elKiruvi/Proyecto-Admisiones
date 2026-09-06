@@ -26,3 +26,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Issue #30: hardened feature validation so invalid dtypes skip dependent range/category checks and report a single `FeatureValidationError` instead of incidental `TypeError` exceptions.
 - Issue #31: added explicit RMSE gap diagnostics to the training report, comparing each gap magnitude against the fold-level RMSE standard deviation with a within/exceeds verdict (zero-std handled without division).
+- Issue #41: decoupled screening folds from outer CV folds in the model-selection notebook (independent screening seed 123; outer 42 and inner 7 unchanged), removing selection-then-evaluation bias from the comparative evidence.

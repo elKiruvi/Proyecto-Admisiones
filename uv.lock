@@ -1889,6 +1889,7 @@ dependencies = [
     { name = "joblib" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pyarrow" },
     { name = "scikit-learn" },
     { name = "streamlit" },
 ]
@@ -1900,7 +1901,6 @@ dev = [
     { name = "jupyter" },
     { name = "matplotlib" },
     { name = "pre-commit" },
-    { name = "pyarrow" },
     { name = "pytest" },
     { name = "pytest-cookies" },
     { name = "pytest-cov" },
@@ -1913,6 +1913,7 @@ requires-dist = [
     { name = "joblib", specifier = "==1.5.3" },
     { name = "numpy", specifier = "==2.5.2" },
     { name = "pandas", specifier = "==3.0.5" },
+    { name = "pyarrow", specifier = ">=18" },
     { name = "scikit-learn", specifier = "==1.9.0" },
     { name = "streamlit", specifier = "==1.62.0" },
 ]
@@ -1924,7 +1925,6 @@ dev = [
     { name = "jupyter", specifier = ">=1.0" },
     { name = "matplotlib", specifier = ">=3.10" },
     { name = "pre-commit", specifier = ">=4.6.1" },
-    { name = "pyarrow", specifier = ">=18" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cookies", specifier = ">=0.7.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },

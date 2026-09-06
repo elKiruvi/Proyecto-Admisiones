@@ -12,6 +12,7 @@ dependencies = [
     "joblib==1.5.3",
     "numpy==2.5.2",
     "pandas==3.0.5",
+    "pyarrow>=18", # Parquet engine required by the feature pipeline
     "scikit-learn==1.9.0",
     "streamlit==1.62.0",
 ]
@@ -32,7 +33,6 @@ dev = [
     "matplotlib>=3.10", # EDA and model diagnostics plots
     "seaborn>=0.13", # Statistical visualizations
     "scipy>=1.14", # Statistical tests imported directly by notebooks
-    "pyarrow>=18", # Parquet schema imported directly by notebook 02.1
 ]
 
 #

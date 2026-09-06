@@ -107,8 +107,7 @@ def build_features(raw_df: pd.DataFrame) -> pd.DataFrame:
     if missing_columns:
         raise ValueError(f"Dataset is missing required columns: {missing_columns}")
 
-    features_df = raw_df.loc[:, [*FEATURE_COLUMNS, TARGET_COLUMN]]
-    return features_df.drop_duplicates().reset_index(drop=True)
+    return raw_df.drop_duplicates().loc[:, [*FEATURE_COLUMNS, TARGET_COLUMN]].reset_index(drop=True)
 
 
 def build_preprocessor() -> ColumnTransformer:

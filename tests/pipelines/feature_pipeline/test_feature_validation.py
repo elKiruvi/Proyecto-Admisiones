@@ -86,6 +86,46 @@ def test_invalid_dtype_raises() -> None:
         validate_features(frame)
 
 
+def test_string_in_numeric_column_raises_feature_validation_error() -> None:
+    frame = build_valid_feature_frame()
+    frame["GRE Score"] = frame["GRE Score"].astype(object)
+    frame.loc[0, "GRE Score"] = "not-a-number"
+
+    with pytest.raises(FeatureValidationError, match="GRE Score") as exc_info:
+        validate_features(frame)
+
+    message = str(exc_info.value)
+    assert "object" in message
+
+
+def test_mixed_types_in_categorical_column_raise_feature_validation_error() -> None:
+    frame = build_valid_feature_frame()
+    frame["SOP"] = frame["SOP"].astype(object)
+    frame.loc[0, "SOP"] = "invalid"
+    frame.loc[1, "SOP"] = OUT_OF_DOMAIN_SOP
+
+    with pytest.raises(FeatureValidationError, match="SOP") as exc_info:
+        validate_features(frame)
+
+    assert "object" in str(exc_info.value)
+
+
+def test_multiple_malformed_inputs_aggregate_into_single_error() -> None:
+    frame = build_valid_feature_frame()
+    frame["GRE Score"] = frame["GRE Score"].astype(object)
+    frame.loc[0, "GRE Score"] = "not-a-number"
+    frame["Extra Column"] = 1
+    frame.loc[1, "CGPA"] = OUT_OF_RANGE_CGPA
+
+    with pytest.raises(FeatureValidationError) as exc_info:
+        validate_features(frame)
+
+    message = str(exc_info.value)
+    assert "GRE Score" in message
+    assert "Extra Column" in message
+    assert "CGPA" in message
+
+
 def test_range_violation_raises() -> None:
     frame = build_valid_feature_frame()
     frame.loc[0, "CGPA"] = OUT_OF_RANGE_CGPA

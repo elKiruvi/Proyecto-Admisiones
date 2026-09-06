@@ -200,6 +200,15 @@ def _check_schema(features_df: pd.DataFrame) -> list[str]:
     return failures
 
 
+def _column_dtype_is_valid(features_df: pd.DataFrame, column: str) -> bool:
+    """Return whether ``column`` satisfies its dtype contract."""
+    if column in INTEGER_COLUMNS:
+        return bool(pd.api.types.is_integer_dtype(features_df[column].dtype))
+    if column in FLOAT_COLUMNS:
+        return bool(pd.api.types.is_float_dtype(features_df[column].dtype))
+    return True
+
+
 def _check_null_fractions(features_df: pd.DataFrame) -> list[str]:
     """Return failures about columns whose null fraction exceeds its contract."""
     failures: list[str] = []
@@ -215,11 +224,17 @@ def _check_null_fractions(features_df: pd.DataFrame) -> list[str]:
 
 
 def _check_ranges(features_df: pd.DataFrame) -> list[str]:
-    """Return failures about values outside their documented specification range."""
+    """Return failures about values outside their documented specification range.
+
+    Columns whose dtype violates the contract are skipped: their failure was
+    already reported by :func:`_check_schema`.
+    """
     failures: list[str] = []
     for column, (lower_bound, upper_bound) in CONTINUOUS_RANGES.items():
         if column not in features_df.columns:
             continue
+        if not _column_dtype_is_valid(features_df, column):
+            continue  # dtype failure already reported by _check_schema
         values = features_df[column].dropna()
         outside = values[(values < lower_bound) | (values > upper_bound)]
         if outside.empty:
@@ -232,11 +247,17 @@ def _check_ranges(features_df: pd.DataFrame) -> list[str]:
 
 
 def _check_categories(features_df: pd.DataFrame) -> list[str]:
-    """Return failures about values outside their effective categorical domain."""
+    """Return failures about values outside their effective categorical domain.
+
+    Columns whose dtype violates the contract are skipped: their failure was
+    already reported by :func:`_check_schema`.
+    """
     failures: list[str] = []
     for column, allowed_categories in CATEGORICAL_DOMAINS.items():
         if column not in features_df.columns:
             continue
+        if not _column_dtype_is_valid(features_df, column):
+            continue  # dtype failure already reported by _check_schema
         values = features_df[column].dropna()
         outside = values[~values.isin(allowed_categories)]
         if outside.empty:

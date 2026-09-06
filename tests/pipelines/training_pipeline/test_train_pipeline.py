@@ -17,6 +17,7 @@ from pipelines.training_pipeline.train_pipeline import (
     FEATURE_COLUMNS,
     TARGET_COLUMN,
     CrossValidationMetrics,
+    TrainTestValidationReport,
     build_metrics_report,
     build_model_pipeline,
     cross_validate_model,
@@ -78,6 +79,23 @@ def persist_synthetic_features(frame: pd.DataFrame, path: Path) -> Path:
     """Persist a synthetic frame as Parquet and return its path."""
     frame.to_parquet(path, index=False, engine="pyarrow")
     return path
+
+
+def build_split_validation_report() -> TrainTestValidationReport:
+    """Return a minimal valid split-validation report for report assembly."""
+    return {
+        "rows": {"train": TRAIN_ROW_COUNT, "test": TEST_ROW_COUNT},
+        "ratio": {
+            "test_to_train": TEST_ROW_COUNT / TRAIN_ROW_COUNT,
+            "test_to_total": TEST_ROW_COUNT / SYNTHETIC_ROW_COUNT,
+        },
+        "checks": [
+            {"name": "disjoint_indices", "status": "PASS", "detail": "ok"},
+        ],
+        "drift": {"GRE Score": 0.05, TARGET_COLUMN: 0.02},
+        "null_rates": {"train": {}, "test": {}},
+        "warnings": [],
+    }
 
 
 def test_default_paths_point_to_expected_locations() -> None:
@@ -284,7 +302,10 @@ def test_save_metrics_writes_deterministic_json(tmp_path: Path) -> None:
     }
     test_metrics = {"rmse": 0.14, "mae": 0.10, "r2": 0.85}
     report = build_metrics_report(
-        train_metrics, cv_metrics, test_metrics, TRAIN_ROW_COUNT, TEST_ROW_COUNT
+        train_metrics,
+        cv_metrics,
+        test_metrics,
+        build_split_validation_report(),
     )
 
     first_path = save_metrics(report, tmp_path / "first.json")
@@ -307,9 +328,13 @@ def test_build_metrics_report_contains_expected_structure_and_gaps() -> None:
         "r2_std": 0.02,
     }
     test_metrics = {"rmse": 0.14, "mae": 0.10, "r2": 0.85}
+    split_validation = build_split_validation_report()
 
     report = build_metrics_report(
-        train_metrics, cv_metrics, test_metrics, TRAIN_ROW_COUNT, TEST_ROW_COUNT
+        train_metrics,
+        cv_metrics,
+        test_metrics,
+        split_validation,
     )
 
     assert report["model"] == "LinearRegression"
@@ -317,6 +342,7 @@ def test_build_metrics_report_contains_expected_structure_and_gaps() -> None:
     assert report["train"] == train_metrics
     assert report["cv"] == cv_metrics
     assert report["test"] == test_metrics
+    assert report["split_validation"] == split_validation
     assert report["gaps"]["train_minus_cv_rmse"] == pytest.approx(0.1 - 0.12)
     assert report["gaps"]["test_minus_cv_rmse"] == pytest.approx(0.14 - 0.12)
 
@@ -337,6 +363,10 @@ def test_run_training_pipeline_end_to_end(tmp_path: Path) -> None:
     assert Path(output["metrics_path"]).is_file()
     assert output["report"]["rows"] == {"train": TRAIN_ROW_COUNT, "test": TEST_ROW_COUNT}
     assert len(output["report"]["cv"]["folds"]) == CV_FOLD_COUNT
+    assert output["report"]["split_validation"]["rows"] == {
+        "train": TRAIN_ROW_COUNT,
+        "test": TEST_ROW_COUNT,
+    }
 
     reloaded = joblib.load(model_path)
     _, X_test, _, _ = split_features(frame)

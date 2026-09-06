@@ -616,7 +616,7 @@ def run_training_pipeline(
     6. evaluate train and test with the final refit model;
     7. serialize the artifact and the metrics report.
 
-    The test set participates exclusively in step 6.
+    The test set is excluded from fitting and model selection but is inspected by the pre-fit split-validation step.
     """
     features_df = read_features(features_path)
     X_train, X_test, y_train, y_test = split_features(features_df)

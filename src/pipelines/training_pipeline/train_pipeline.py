@@ -136,7 +136,7 @@ def read_features(features_path: Path | None = None) -> pd.DataFrame:
     actual_columns = list(features_df.columns)
     missing_columns = [column for column in expected_columns if column not in actual_columns]
     unexpected_columns = [column for column in actual_columns if column not in expected_columns]
-    if missing_columns or unexpected_columns:
+    if not features_df.columns.is_unique or missing_columns or unexpected_columns:
         details = []
         if missing_columns:
             details.append(f"missing columns: {missing_columns}")

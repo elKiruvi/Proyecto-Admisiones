@@ -125,6 +125,60 @@ uv run streamlit run src/inference/streamlit_app.py
 Open the local URL printed by Streamlit, normally
 `http://localhost:8501`.
 
+### Docker
+
+Docker is an additional reproducibility layer for the same application: it
+does not replace the Streamlit Community Cloud deployment and it does not
+change the model, the inference pipeline or the app behavior. The image
+follows the "Despliegue de Modelos con FastAPI y Docker" course approach
+(UV for dependency management, multi-stage build, model artifact packaged
+with the application) adapted to Streamlit instead of FastAPI:
+
+```text
+UV + uv.lock → multi-stage image → existing Streamlit application → existing model artifact
+```
+
+- Builder stage: `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` installs
+  only the locked runtime dependencies (`uv sync --frozen
+  --no-default-groups`, dropping the dev group).
+- Runtime stage: `python:3.12-slim-bookworm` carries the locked virtual
+  environment, the reusable inference code (`src/`), the immutable artifact
+  (`models/05_model_selection_pipeline.joblib`) and the versioned sample
+  batch input (`data/05_model_input/new_applicants.csv`), and runs the
+  existing entrypoint `src/inference/streamlit_app.py` as a non-root user.
+
+**Prerequisites**: Docker installed locally.
+
+Build the image from the repository root:
+
+```bash
+docker build -t proyecto-admisiones:latest .
+```
+
+Run the container and expose Streamlit on port `8501`:
+
+```bash
+docker run --rm -p 8501:8501 --name admissions-docker proyecto-admisiones:latest
+```
+
+Open `http://localhost:8501` in a browser. Both tabs work as in the local
+and Cloud deployments: **Online prediction** (single applicant profile) and
+**Batch prediction** (upload `data/05_model_input/new_applicants.csv` from
+the repository, preview and download the predictions).
+
+Verify the Streamlit health endpoint (the image also declares a
+`HEALTHCHECK` against it):
+
+```bash
+curl -fsS http://localhost:8501/_stcore/health
+```
+
+Expected output: `ok`. Stop and remove the container with:
+
+```bash
+docker stop admissions-docker
+```
+
 ### Online prediction
 
 The **Online prediction** tab provides the web interface for entering a

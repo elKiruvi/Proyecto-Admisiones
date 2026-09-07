@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue #49: blocking dependency vulnerability audit in CI (`uv audit --locked` job with UV pinned to 0.12.2) plus a local `make audit` target; current advisories are documented as temporary exceptions in AGENTS.md, pending a separate dependency-remediation Issue.
 - Issue #56: Streamlit batch prediction mode (CSV upload validated by the existing inference rules and predicted by the fitted artifact, results preview and CSV download) with a thin reusable batch helper layer, AppTest coverage and versioned sample input/output files.
 - Issue #58: public Streamlit Community Cloud deployment documented (URL, usage instructions for the online and batch modes, and deployment evidence with a Task 3 traceability matrix; the batch mode itself was implemented in Issue #56).
+- Issue #60: Docker containerization of the Streamlit app (multi-stage image with a UV builder stage and a Python 3.12 runtime, locked runtime dependencies, packaged model artifact, non-root user and `/_stcore/health` health check), documented as an additional execution layer that does not replace the Streamlit Community Cloud deployment.
 
 ### Fixed
 

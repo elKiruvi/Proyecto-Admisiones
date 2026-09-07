@@ -8,6 +8,10 @@ data/**
 # also keep all .gitkeep files
 !.gitkeep
 
+# Issue #56: versioned sample batch input/output for the Streamlit demo
+!data/05_model_input/new_applicants.csv
+!data/07_model_output/admission_predictions.csv
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

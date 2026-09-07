@@ -134,5 +134,8 @@ out/
 # Local Gentle AI artifacts
 .atl/
 
+# Local MLflow tracking store (Issue #47 practice)
+mlruns/
+
 # Issue #2 intermediate dataset
 !data/02_intermediate/Admission_Predict.parquet

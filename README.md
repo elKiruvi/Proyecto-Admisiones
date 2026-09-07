@@ -109,6 +109,30 @@ calibrated probability, is not converted to a percentage, and is not clipped
 to `[0, 1]`. Continuous values outside the observed training range are
 accepted and may represent extrapolation.
 
+## MLflow Experiment Tracking Practice
+
+Issue #47 provides a standalone MLflow practice (Unit 11) that registers the
+official training evidence without re-training, re-selecting or recalculating
+anything: it reads `data/08_reporting/training_metrics.json` and the canonical
+`models/05_model_selection_pipeline.joblib` read-only, logs the experiment
+parameters and metrics, and registers the model as an exact artifact copy.
+
+```bash
+uv sync --locked
+uv run python scripts/mlflow_experiment_tracking.py
+```
+
+Results are stored locally: metadata in `mlflow.db` (SQLite) and artifacts in
+`mlruns/` at the repository root (both gitignored). Inspect them with the
+local UI:
+
+```bash
+MLFLOW_TRACKING_URI=sqlite:///<repository-root>/mlflow.db mlflow ui
+```
+
+MLflow records existing evidence only: it does not perform model selection,
+tuning or any Test-based decision.
+
 For the assignment evidence, run the local application and attach a
 screenshot of the completed form and prediction to the pull request or issue.
 

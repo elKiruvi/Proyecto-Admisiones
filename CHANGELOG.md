@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue #31: standalone training pipeline script (feature Parquet → train/test split → LinearRegression Pipeline training with K-Fold validation → model artifact and evaluation report persistence) with unit tests.
 - Issue #32: train/test split validation in the training pipeline (structural split checks with controlled errors, KS distribution drift warnings, split-validation report persisted in the metrics report) with unit tests.
 - Issue #45: standalone Pandera data-validation practice for Unit 9 (schema, valid case, controlled failure and interpretation as academic evidence; dev-only dependency, production validation unchanged).
+- Issue #47: standalone MLflow experiment-tracking practice for Unit 11 (registers the official training report parameters/metrics and the canonical model artifact in a local store; dev-only dependency, no re-training or Test usage).
 
 ### Fixed
 

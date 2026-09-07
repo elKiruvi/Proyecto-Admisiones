@@ -34,6 +34,7 @@ dev = [
     "seaborn>=0.13", # Statistical visualizations
     "scipy>=1.14", # Statistical tests imported directly by notebooks
     "pandera[pandas]>=0.30.0", # Data validation practice (Unit 9); dev-only, never imported by src/
+    "mlflow>=3.12.0", # Experiment tracking practice (Unit 11); dev-only, never imported by src/
 ]
 
 #

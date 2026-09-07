@@ -15,13 +15,22 @@ from sklearn.pipeline import Pipeline
 from pipelines.inference_pipeline.inference import load_model
 from pipelines.training_pipeline.train_pipeline import (
     FEATURE_COLUMNS,
+    MIN_BASELINE_IMPROVEMENT,
+    STATUS_ACCEPTABLE,
+    STATUS_REVIEW_RECOMMENDED,
     TARGET_COLUMN,
+    VERDICT_NO_SIGNAL,
+    VERDICT_POSSIBLE_GENERALIZATION_GAP,
+    VERDICT_POSSIBLE_OVERFITTING,
+    VERDICT_POSSIBLE_UNDERFITTING,
     CrossValidationMetrics,
     TrainTestValidationReport,
+    ValidationDiagnosis,
     _gap_is_within_fold_variability,
     build_gap_diagnostics,
     build_metrics_report,
     build_model_pipeline,
+    build_validation_diagnosis,
     cross_validate_model,
     default_feature_input_path,
     default_metrics_output_path,
@@ -97,6 +106,19 @@ def build_split_validation_report() -> TrainTestValidationReport:
         "drift": {"GRE Score": 0.05, TARGET_COLUMN: 0.02},
         "null_rates": {"train": {}, "test": {}},
         "warnings": [],
+    }
+
+
+def build_cv_metrics(rmse_mean: float, rmse_std: float) -> CrossValidationMetrics:
+    """Return deterministic CV metrics at the given RMSE mean and std."""
+    return {
+        "folds": [{"rmse": rmse_mean, "mae": 0.04, "r2": 0.8} for _ in range(CV_FOLD_COUNT)],
+        "rmse_mean": rmse_mean,
+        "rmse_std": rmse_std,
+        "mae_mean": 0.04,
+        "mae_std": 0.005,
+        "r2_mean": 0.8,
+        "r2_std": 0.02,
     }
 
 
@@ -447,7 +469,9 @@ def test_run_training_pipeline_end_to_end(tmp_path: Path) -> None:
         output["report"]["cv"]["rmse_std"]
     )
     with metrics_path.open(encoding="utf-8") as handle:
-        assert "gap_diagnostics" in json.load(handle)
+        serialized_report = json.load(handle)
+        assert "gap_diagnostics" in serialized_report
+        assert "validation_diagnosis" in serialized_report
 
     reloaded = joblib.load(model_path)
     _, X_test, _, _ = split_features(frame)
@@ -501,3 +525,142 @@ def test_real_feature_set_reproduces_historical_metrics() -> None:
     assert test_metrics["rmse"] == pytest.approx(HISTORICAL_TEST_RMSE, abs=METRIC_TOLERANCE)
     assert test_metrics["mae"] == pytest.approx(HISTORICAL_TEST_MAE, abs=METRIC_TOLERANCE)
     assert test_metrics["r2"] == pytest.approx(HISTORICAL_TEST_R2, abs=METRIC_TOLERANCE)
+
+
+def test_diagnosis_acceptable_generalization_from_official_scale() -> None:
+    train_metrics = {"rmse": 0.06244, "mae": 0.04508, "r2": 0.80743}
+    cv_metrics = build_cv_metrics(0.064463, 0.007349)
+    test_metrics = {"rmse": 0.0685, "mae": 0.05119, "r2": 0.7872}
+
+    diagnosis = build_validation_diagnosis(train_metrics, cv_metrics, test_metrics)
+
+    assert diagnosis["status"] == STATUS_ACCEPTABLE
+    assert diagnosis["overfitting"]["verdict"] == VERDICT_NO_SIGNAL
+    assert diagnosis["underfitting"]["verdict"] == VERDICT_NO_SIGNAL
+    assert diagnosis["generalization"]["verdict"] == VERDICT_NO_SIGNAL
+    assert diagnosis["overfitting"]["actions"] == []
+    assert diagnosis["underfitting"]["actions"] == []
+    assert diagnosis["generalization"]["actions"] == []
+    underfitting_evidence = diagnosis["underfitting"]["evidence"]
+    assert underfitting_evidence["baseline_cv_rmse"] == pytest.approx(0.1423)
+    assert underfitting_evidence["relative_improvement"] == pytest.approx(1.0 - 0.064463 / 0.1423)
+
+
+def test_diagnosis_possible_overfitting_case() -> None:
+    train_metrics = {"rmse": 0.040, "mae": 0.030, "r2": 0.90}
+    cv_metrics = build_cv_metrics(0.064, 0.005)
+    test_metrics = {"rmse": 0.065, "mae": 0.050, "r2": 0.78}
+
+    diagnosis = build_validation_diagnosis(train_metrics, cv_metrics, test_metrics)
+
+    assert diagnosis["overfitting"]["verdict"] == VERDICT_POSSIBLE_OVERFITTING
+    assert diagnosis["status"] == STATUS_REVIEW_RECOMMENDED
+    assert diagnosis["overfitting"]["actions"]
+    assert diagnosis["underfitting"]["verdict"] == VERDICT_NO_SIGNAL
+    assert diagnosis["generalization"]["verdict"] == VERDICT_NO_SIGNAL
+
+
+def test_diagnosis_negative_train_gap_is_not_overfitting() -> None:
+    train_metrics = {"rmse": 0.075, "mae": 0.055, "r2": 0.70}
+    cv_metrics = build_cv_metrics(0.064, 0.005)
+    test_metrics = {"rmse": 0.065, "mae": 0.050, "r2": 0.78}
+
+    diagnosis = build_validation_diagnosis(train_metrics, cv_metrics, test_metrics)
+
+    assert diagnosis["overfitting"]["verdict"] == VERDICT_NO_SIGNAL
+
+
+def test_diagnosis_possible_underfitting_case() -> None:
+    train_metrics = {"rmse": 0.137, "mae": 0.110, "r2": 0.05}
+    cv_metrics = build_cv_metrics(0.138, 0.005)
+    test_metrics = {"rmse": 0.139, "mae": 0.110, "r2": 0.05}
+
+    diagnosis = build_validation_diagnosis(train_metrics, cv_metrics, test_metrics)
+
+    assert diagnosis["underfitting"]["verdict"] == VERDICT_POSSIBLE_UNDERFITTING
+    assert diagnosis["status"] == STATUS_REVIEW_RECOMMENDED
+    assert diagnosis["underfitting"]["actions"]
+    assert diagnosis["overfitting"]["verdict"] == VERDICT_NO_SIGNAL
+    assert diagnosis["generalization"]["verdict"] == VERDICT_NO_SIGNAL
+    assert diagnosis["underfitting"]["evidence"]["relative_improvement"] < MIN_BASELINE_IMPROVEMENT
+
+
+def test_diagnosis_possible_generalization_gap_case() -> None:
+    train_metrics = {"rmse": 0.062, "mae": 0.045, "r2": 0.80}
+    cv_metrics = build_cv_metrics(0.064, 0.007)
+    test_metrics = {"rmse": 0.075, "mae": 0.055, "r2": 0.70}
+
+    diagnosis = build_validation_diagnosis(train_metrics, cv_metrics, test_metrics)
+
+    assert diagnosis["generalization"]["verdict"] == VERDICT_POSSIBLE_GENERALIZATION_GAP
+    assert diagnosis["status"] == STATUS_REVIEW_RECOMMENDED
+    assert diagnosis["generalization"]["actions"]
+    assert diagnosis["overfitting"]["verdict"] == VERDICT_NO_SIGNAL
+
+
+def test_diagnosis_underfitting_verdict_ignores_test_metrics() -> None:
+    train_metrics = {"rmse": 0.062, "mae": 0.045, "r2": 0.80}
+    cv_metrics = build_cv_metrics(0.064, 0.007)
+    reasonable_test = {"rmse": 0.068, "mae": 0.050, "r2": 0.78}
+    extreme_test = {"rmse": 0.400, "mae": 0.300, "r2": -0.20}
+
+    first = build_validation_diagnosis(train_metrics, cv_metrics, reasonable_test)
+    second = build_validation_diagnosis(train_metrics, cv_metrics, extreme_test)
+
+    assert first["underfitting"] == second["underfitting"]
+
+
+def test_diagnosis_does_not_mutate_input_metrics() -> None:
+    train_metrics = {"rmse": 0.06244, "mae": 0.04508, "r2": 0.80743}
+    cv_metrics = build_cv_metrics(0.064463, 0.007349)
+    test_metrics = {"rmse": 0.0685, "mae": 0.05119, "r2": 0.7872}
+    train_before = dict(train_metrics)
+    cv_before = dict(cv_metrics)
+    test_before = dict(test_metrics)
+
+    build_validation_diagnosis(train_metrics, cv_metrics, test_metrics)
+
+    assert train_metrics == train_before
+    assert cv_metrics == cv_before
+    assert test_metrics == test_before
+
+
+def test_build_metrics_report_includes_validation_diagnosis() -> None:
+    train_metrics = {"rmse": 0.1, "mae": 0.08, "r2": 0.9}
+    cv_metrics: CrossValidationMetrics = {
+        "folds": [{"rmse": 0.12, "mae": 0.09, "r2": 0.88}],
+        "rmse_mean": 0.12,
+        "rmse_std": 0.01,
+        "mae_mean": 0.09,
+        "mae_std": 0.005,
+        "r2_mean": 0.88,
+        "r2_std": 0.02,
+    }
+    test_metrics = {"rmse": 0.14, "mae": 0.10, "r2": 0.85}
+    split_validation = build_split_validation_report()
+
+    report = build_metrics_report(
+        train_metrics,
+        cv_metrics,
+        test_metrics,
+        split_validation,
+    )
+
+    diagnosis: ValidationDiagnosis = report["validation_diagnosis"]
+    assert diagnosis["status"] in {STATUS_ACCEPTABLE, STATUS_REVIEW_RECOMMENDED}
+    assert diagnosis["overfitting"]["verdict"] in {
+        VERDICT_NO_SIGNAL,
+        VERDICT_POSSIBLE_OVERFITTING,
+    }
+    assert diagnosis["underfitting"]["verdict"] in {
+        VERDICT_NO_SIGNAL,
+        VERDICT_POSSIBLE_UNDERFITTING,
+    }
+    assert diagnosis["generalization"]["verdict"] in {
+        VERDICT_NO_SIGNAL,
+        VERDICT_POSSIBLE_GENERALIZATION_GAP,
+    }
+    assert report["train"] == train_metrics
+    assert report["cv"] == cv_metrics
+    assert report["test"] == test_metrics
+    assert report["gap_diagnostics"]["rule"] == "abs(gap) <= rmse_std"

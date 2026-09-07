@@ -21,13 +21,37 @@ Data-leakage contract (Issue #31 acceptance criteria)
   set, never from a cross-validation fold estimator.
 
 Validation scope (Issue #31)
-----------------------------
+---------------------------
 
 - K-Fold cross-validation (5 folds, shuffled, seed 42) on the training
   set only, reproducing the historical outer CV of Issue #6.
 - Train, CV and Test metrics: RMSE, MAE and R2.
-- Minimal over/underfitting signal: train-CV and test-CV RMSE gaps
-  compared against the fold-level standard deviation.
+- RMSE gap diagnostics: train-CV and test-CV RMSE gaps compared
+  against the fold-level standard deviation.
+
+Model validation diagnosis (Issue #33)
+--------------------------------------
+
+:func:`build_validation_diagnosis` interprets the already-computed
+train, CV and test metrics into named, reproducible signals. It never
+refits models, never performs model selection, and Test only
+describes the already-trained model:
+
+- overfitting signal: the train-vs-CV RMSE gap, reported as possible
+  overfitting only when train outperforms CV beyond the observed fold
+  variability, in the direction expected for overfitting;
+- underfitting signal: the CV RMSE relative to the historical Issue #5
+  DummyRegressor five-fold CV baseline (0.1423), reported as possible
+  underfitting when the relative improvement is below 10% (course
+  "Simple Model Comparison" criterion). The train-CV closeness is
+  never used as underfitting evidence;
+- generalization signal: the CV-vs-Test RMSE gap, reported as a
+  possible generalization gap when it exceeds the observed fold
+  variability (descriptive only).
+
+Each signal carries structured evidence and conditional improvement
+actions, which are recommendations, never automatic retraining. The
+diagnosis is persisted inside the metrics report.
 
 Split validation (Issue #32)
 ----------------------------
@@ -44,10 +68,6 @@ before any fitting:
   the returned :class:`TrainTestValidationReport`;
 - the report is persisted inside the metrics report so the split
   evidence survives next to the artifact.
-
-Deep validation analysis (learning curves, formal diagnostics,
-visualizations, improvement actions) belongs to Issue #33. Train/test
-split checks belong to Issue #32.
 """
 
 from __future__ import annotations
@@ -101,6 +121,30 @@ SCORING_METRICS: dict[str, str] = {
     "mae": "neg_mean_absolute_error",
     "r2": "r2",
 }
+
+BASELINE_CV_RMSE = 0.1423
+MIN_BASELINE_IMPROVEMENT = 0.10
+
+VERDICT_NO_SIGNAL = "no_signal"
+VERDICT_POSSIBLE_OVERFITTING = "possible_overfitting"
+VERDICT_POSSIBLE_UNDERFITTING = "possible_underfitting"
+VERDICT_POSSIBLE_GENERALIZATION_GAP = "possible_generalization_gap"
+STATUS_ACCEPTABLE = "acceptable"
+STATUS_REVIEW_RECOMMENDED = "review_recommended"
+
+OVERFITTING_ACTIONS: tuple[str, ...] = (
+    "consider regularization (e.g. Ridge) or a lower-complexity model",
+    "consider obtaining more representative or additional training data",
+    "review feature engineering for redundant or noisy features",
+)
+UNDERFITTING_ACTIONS: tuple[str, ...] = (
+    "consider richer features or feature interactions",
+    "consider higher-capacity models (e.g. polynomial features or non-linear estimators)",
+)
+GENERALIZATION_GAP_ACTIONS: tuple[str, ...] = (
+    "inspect the train/test drift evidence in split_validation.drift",
+    "monitor performance on new data before deployment",
+)
 
 
 class SplitCheckResult(TypedDict):
@@ -156,6 +200,30 @@ class RmseGapDiagnostics(TypedDict):
     test_minus_cv_rmse: RmseGapDiagnosticEntry
 
 
+class DiagnosticSignal(TypedDict):
+    """One model-validation diagnostic dimension.
+
+    ``verdict`` is one of the ``VERDICT_*`` constants, ``evidence`` holds
+    the exact numbers that drove the verdict, and ``actions`` lists the
+    conditional improvement recommendations (empty when there is no
+    signal). The diagnosis is descriptive and reproducible: it never
+    refits models and never uses Test for any model decision.
+    """
+
+    verdict: str
+    evidence: dict[str, float | bool]
+    actions: list[str]
+
+
+class ValidationDiagnosis(TypedDict):
+    """Structured model-validation diagnosis over the three dimensions."""
+
+    status: str
+    overfitting: DiagnosticSignal
+    underfitting: DiagnosticSignal
+    generalization: DiagnosticSignal
+
+
 class MetricsReport(TypedDict):
     """Deterministic training evidence report persisted next to the artifact."""
 
@@ -169,6 +237,7 @@ class MetricsReport(TypedDict):
     test: dict[str, float]
     gaps: dict[str, float]
     gap_diagnostics: RmseGapDiagnostics
+    validation_diagnosis: ValidationDiagnosis
     split_validation: TrainTestValidationReport
 
 
@@ -667,6 +736,99 @@ def build_gap_diagnostics(
     }
 
 
+def _overfitting_signal(
+    train_metrics: dict[str, float],
+    cv_metrics: CrossValidationMetrics,
+) -> DiagnosticSignal:
+    """Diagnose the train-vs-CV RMSE gap in the overfitting direction.
+
+    Possible overfitting is reported only when train outperforms CV
+    beyond the observed fold variability. The negative-gap case (train
+    worse than CV) never produces an overfitting signal.
+    """
+    gap = train_metrics["rmse"] - cv_metrics["rmse_mean"]
+    within = _gap_is_within_fold_variability(gap, cv_metrics["rmse_std"])
+    signal = not within and gap < 0
+    return {
+        "verdict": VERDICT_POSSIBLE_OVERFITTING if signal else VERDICT_NO_SIGNAL,
+        "evidence": {
+            "train_rmse": train_metrics["rmse"],
+            "cv_rmse_mean": cv_metrics["rmse_mean"],
+            "train_minus_cv_rmse": gap,
+            "cv_rmse_std": cv_metrics["rmse_std"],
+            "within_fold_variability": within,
+        },
+        "actions": list(OVERFITTING_ACTIONS) if signal else [],
+    }
+
+
+def _underfitting_signal(cv_metrics: CrossValidationMetrics) -> DiagnosticSignal:
+    """Diagnose underfitting from the CV improvement over the baseline.
+
+    The signal compares the model's CV RMSE against the historical
+    DummyRegressor five-fold CV RMSE (Issue #5), using the same
+    evaluation protocol. Test metrics and the train-CV closeness are
+    deliberately ignored.
+    """
+    improvement = 1.0 - cv_metrics["rmse_mean"] / BASELINE_CV_RMSE
+    signal = improvement < MIN_BASELINE_IMPROVEMENT
+    return {
+        "verdict": VERDICT_POSSIBLE_UNDERFITTING if signal else VERDICT_NO_SIGNAL,
+        "evidence": {
+            "cv_rmse_mean": cv_metrics["rmse_mean"],
+            "baseline_cv_rmse": BASELINE_CV_RMSE,
+            "relative_improvement": improvement,
+        },
+        "actions": list(UNDERFITTING_ACTIONS) if signal else [],
+    }
+
+
+def _generalization_signal(
+    cv_metrics: CrossValidationMetrics,
+    test_metrics: dict[str, float],
+) -> DiagnosticSignal:
+    """Diagnose the CV-vs-Test RMSE gap as a descriptive generalization check."""
+    gap = test_metrics["rmse"] - cv_metrics["rmse_mean"]
+    within = _gap_is_within_fold_variability(gap, cv_metrics["rmse_std"])
+    signal = not within
+    return {
+        "verdict": VERDICT_POSSIBLE_GENERALIZATION_GAP if signal else VERDICT_NO_SIGNAL,
+        "evidence": {
+            "test_rmse": test_metrics["rmse"],
+            "cv_rmse_mean": cv_metrics["rmse_mean"],
+            "test_minus_cv_rmse": gap,
+            "cv_rmse_std": cv_metrics["rmse_std"],
+            "within_fold_variability": within,
+        },
+        "actions": list(GENERALIZATION_GAP_ACTIONS) if signal else [],
+    }
+
+
+def build_validation_diagnosis(
+    train_metrics: dict[str, float],
+    cv_metrics: CrossValidationMetrics,
+    test_metrics: dict[str, float],
+) -> ValidationDiagnosis:
+    """Derive the model-validation diagnosis from already-computed metrics.
+
+    Pure and deterministic: it consumes the train, CV and test metric
+    dictionaries and never refits, selects or alters any model. The
+    overall status is derived from the three signals, never hardcoded.
+    """
+    signals = {
+        "overfitting": _overfitting_signal(train_metrics, cv_metrics),
+        "underfitting": _underfitting_signal(cv_metrics),
+        "generalization": _generalization_signal(cv_metrics, test_metrics),
+    }
+    has_signal = any(signal["verdict"] != VERDICT_NO_SIGNAL for signal in signals.values())
+    return {
+        "status": STATUS_REVIEW_RECOMMENDED if has_signal else STATUS_ACCEPTABLE,
+        "overfitting": signals["overfitting"],
+        "underfitting": signals["underfitting"],
+        "generalization": signals["generalization"],
+    }
+
+
 def build_metrics_report(
     train_metrics: dict[str, float],
     cv_metrics: CrossValidationMetrics,
@@ -692,6 +854,7 @@ def build_metrics_report(
             "test_minus_cv_rmse": test_metrics["rmse"] - cv_metrics["rmse_mean"],
         },
         "gap_diagnostics": build_gap_diagnostics(train_metrics, cv_metrics, test_metrics),
+        "validation_diagnosis": build_validation_diagnosis(train_metrics, cv_metrics, test_metrics),
         "split_validation": split_validation,
     }
 
@@ -803,6 +966,25 @@ def main() -> None:
         f"  train-CV {gaps['train_minus_cv_rmse']:+.6f} ({train_verdict}) | "
         f"test-CV {gaps['test_minus_cv_rmse']:+.6f} ({test_verdict})"
     )
+    diagnosis = report["validation_diagnosis"]
+    print(
+        f"Validation diagnosis: {diagnosis['status']} | "
+        f"overfitting={diagnosis['overfitting']['verdict']} | "
+        f"underfitting={diagnosis['underfitting']['verdict']} | "
+        f"generalization={diagnosis['generalization']['verdict']}"
+    )
+    improvement_actions: list[tuple[str, str]] = []
+    for dimension_name, signal in (
+        ("overfitting", diagnosis["overfitting"]),
+        ("underfitting", diagnosis["underfitting"]),
+        ("generalization", diagnosis["generalization"]),
+    ):
+        improvement_actions.extend((dimension_name, action) for action in signal["actions"])
+    if improvement_actions:
+        for dimension_name, action in improvement_actions:
+            print(f"  - [{dimension_name}] {action}")
+    else:
+        print("Improvement actions: none required")
     print(f"Model artifact: {output['model_path']}")
     print(f"Metrics report: {output['metrics_path']}")
 

@@ -44,53 +44,7 @@ package = false
 default-groups = [
     "dev",
 ]
-
-# Temporary vulnerability exclusions for `uv audit` (Issue #49). Each advisory
-# ID below was explicitly triaged: a fixed version exists and the upgrade is
-# deferred to the follow-up dependency-remediation Issue. See AGENTS.md section 16.
-[tool.uv.audit]
-ignore = [
-    # click 8.2.1 (fixed in 8.3.3)
-    "PYSEC-2026-2132",
-    # filelock 3.19.1 (fixed in 3.20.3)
-    "GHSA-qmgc-5h2g-mvrw",
-    "GHSA-w853-jp5j-5j7f",
-    # gitpython 3.1.45 (fixed in 3.1.47-3.1.59)
-    "GHSA-3f7w-8rr8-f37f",
-    "GHSA-9rj7-rf2p-w77r",
-    "GHSA-v87r-6q3f-2j67",
-    "GHSA-mv93-w799-cj2w",
-    "GHSA-x2qx-6953-8485",
-    "GHSA-6p8h-3wgx-97gf",
-    "PYSEC-2026-2160",
-    "GHSA-4gmw-gg2m-w46p",
-    "GHSA-hh9p-6wh2-4mfc",
-    "GHSA-rwj8-pgh3-r573",
-    "GHSA-jm78-9fvv-mhgr",
-    "GHSA-hmq2-w58f-27jc",
-    "GHSA-p538-c434-8v24",
-    "GHSA-2f96-g7mh-g2hx",
-    "GHSA-94p4-4cq8-9g67",
-    "GHSA-7545-fcxq-7j24",
-    "PYSEC-2026-3786",
-    "GHSA-539m-9xh6-q6rr",
-    "GHSA-r9mr-m37c-5fr3",
-    "GHSA-wvpp-8hx9-p66j",
-    "PYSEC-2026-3788",
-    "GHSA-fjr4-x663-mwxc",
-    "GHSA-956x-8gvw-wg5v",
-    "GHSA-3rp5-jjmw-4wv2",
-    "PYSEC-2026-3785",
-    "PYSEC-2026-3787",
-    # idna 3.10 (fixed in 3.15)
-    "GHSA-65pc-fj4g-8rjx",
-    # pygments 2.19.2 (fixed in 2.20.0)
-    "GHSA-5239-wwwm-4pmq",
-    # requests 2.32.5 (fixed in 2.33.0)
-    "GHSA-gc5v-m9x4-r6x2",
-    # virtualenv 20.34.0 (fixed in 20.36.1)
-    "GHSA-597g-3phw-6986",
-]
+constraint-dependencies = ["virtualenv<21"]
 
 [build-system]
 requires = ["hatchling"]

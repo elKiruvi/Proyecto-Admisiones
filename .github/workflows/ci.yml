@@ -54,4 +54,18 @@ jobs:
       - name: Run pytest with coverage
         run: uv run pytest --cov --cov-branch --cov-report=xml --cov-fail-under=60
 
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.2"
+
+      - name: Audit locked dependencies
+        run: uv audit --locked
+
         #

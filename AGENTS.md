@@ -738,7 +738,7 @@ uv run pytest --cov --cov-branch --cov-fail-under=60
 Ruff y mypy no son dependencias directas del proyecto: se ejecutan a través
 de pre-commit, usando la configuración en `.code_quality/`.
 
-### Auditoría de dependencias (Issue #49)
+### Auditoría de dependencias
 
 La auditoría de vulnerabilidades usa el comando nativo de UV sobre el lockfile:
 
@@ -749,31 +749,10 @@ make audit
 ```
 
 El job `audit` de `.github/workflows/ci.yml` ejecuta el mismo comando con UV
-fijado a `0.12.2` y es **bloqueante**: cualquier advisory nuevo que no figure
-entre las exclusiones temporales hace fallar CI.
-
-#### Exclusiones temporales de advisories
-
-Los IDs listados en `[tool.uv.audit] ignore` de `pyproject.toml` son
-excepciones temporales, cada una triageada en el Issue #49. Ninguna se ignora
-por comodidad: todas tienen versión corregida disponible y su actualización
-queda diferida a un Issue de remediación de dependencias separado (fuera del
-alcance del Issue #49, que no actualiza dependencias).
-
-| Paquete (versión afectada) | Árbol | Versión corregida | Advisory IDs canónicos ignorados |
-| --- | --- | --- | --- |
-| click 8.2.1 | runtime y dev | 8.3.3 | PYSEC-2026-2132 |
-| filelock 3.19.1 | dev | 3.20.3 | GHSA-qmgc-5h2g-mvrw, GHSA-w853-jp5j-5j7f |
-| gitpython 3.1.45 | dev | 3.1.59 | 26 IDs (GHSA-3f7w-8rr8-f37f, GHSA-9rj7-rf2p-w77r, GHSA-v87r-6q3f-2j67, GHSA-mv93-w799-cj2w, GHSA-x2qx-6953-8485, GHSA-6p8h-3wgx-97gf, PYSEC-2026-2160, GHSA-4gmw-gg2m-w46p, GHSA-hh9p-6wh2-4mfc, GHSA-rwj8-pgh3-r573, GHSA-jm78-9fvv-mhgr, GHSA-hmq2-w58f-27jc, GHSA-p538-c434-8v24, GHSA-2f96-g7mh-g2hx, GHSA-94p4-4cq8-9g67, GHSA-7545-fcxq-7j24, PYSEC-2026-3786, GHSA-539m-9xh6-q6rr, GHSA-r9mr-m37c-5fr3, GHSA-wvpp-8hx9-p66j, PYSEC-2026-3788, GHSA-fjr4-x663-mwxc, GHSA-956x-8gvw-wg5v, GHSA-3rp5-jjmw-4wv2, PYSEC-2026-3785, PYSEC-2026-3787) |
-| idna 3.10 | runtime | 3.15 | GHSA-65pc-fj4g-8rjx |
-| pygments 2.19.2 | dev | 2.20.0 | GHSA-5239-wwwm-4pmq |
-| requests 2.32.5 | runtime | 2.33.0 | GHSA-gc5v-m9x4-r6x2 |
-| virtualenv 20.34.0 | dev | 20.36.1 | GHSA-597g-3phw-6986 |
-
-**Seguimiento**: el Issue de remediación debe actualizar las dependencias
-afectadas, eliminar el bloque `[tool.uv.audit] ignore` de `pyproject.toml` y
-mantener el audit bloqueante. Mientras las exclusiones existan, no eliminar
-IDs sin confirmar que la vulnerabilidad fue corregida por una actualización.
+fijado a `0.12.2` y es **bloqueante**: cualquier advisory conocido hace
+fallar CI. La auditoría no usa exclusiones ni excepciones temporales; las
+vulnerabilidades deben remediarse actualizando las dependencias afectadas,
+nunca ocultarse mediante configuraciones de ignore.
 
 Para notebooks:
 

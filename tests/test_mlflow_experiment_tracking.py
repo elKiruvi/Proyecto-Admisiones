@@ -11,13 +11,17 @@ structure; the real-data run remains the script's own demonstration.
 import hashlib
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
+from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 
 from scripts.mlflow_experiment_tracking import (
+    _get_or_create_experiment_id,
     extract_metrics,
     extract_params,
+    extract_tags,
     load_official_report,
     track_experiment,
 )
@@ -41,6 +45,12 @@ SYNTHETIC_REPORT: dict = {
     "gaps": {
         "train_minus_cv_rmse": -0.0020223523461615697,
         "test_minus_cv_rmse": 0.00403715960014743,
+    },
+    "gap_diagnostics": {
+        "rule": "abs(gap) <= rmse_std",
+        "reference_rmse_std": 0.0073488227452346115,
+        "train_minus_cv_rmse": {"gap": -0.0020223523461615697, "within_fold_variability": True},
+        "test_minus_cv_rmse": {"gap": 0.00403715960014743, "within_fold_variability": True},
     },
 }
 
@@ -84,6 +94,40 @@ def test_extract_params_and_metrics_match_report_values() -> None:
     )
 
 
+def test_extract_metrics_registers_gap_diagnostics_as_metrics_and_tags() -> None:
+    metrics = extract_metrics(SYNTHETIC_REPORT)
+
+    assert metrics["gap_reference_rmse_std"] == pytest.approx(
+        SYNTHETIC_REPORT["gap_diagnostics"]["reference_rmse_std"]
+    )
+    assert metrics["train_minus_cv_rmse_gap"] == pytest.approx(
+        SYNTHETIC_REPORT["gap_diagnostics"]["train_minus_cv_rmse"]["gap"]
+    )
+    assert metrics["test_minus_cv_rmse_gap"] == pytest.approx(
+        SYNTHETIC_REPORT["gap_diagnostics"]["test_minus_cv_rmse"]["gap"]
+    )
+    assert not any("within_fold_variability" in key for key in metrics)
+
+    tags = extract_tags(SYNTHETIC_REPORT)
+    assert tags == {
+        "train_minus_cv_rmse_within_fold_variability": "true",
+        "test_minus_cv_rmse_within_fold_variability": "true",
+    }
+
+
+def test_extract_metrics_without_gap_diagnostics_is_defensive() -> None:
+    report = {key: value for key, value in SYNTHETIC_REPORT.items() if key != "gap_diagnostics"}
+
+    metrics = extract_metrics(report)
+    tags = extract_tags(report)
+
+    assert "gap_reference_rmse_std" not in metrics
+    assert "train_minus_cv_rmse_gap" not in metrics
+    assert not any("within_fold_variability" in key for key in metrics)
+    assert tags == {}
+    assert "gap_train_minus_cv_rmse" in metrics
+
+
 def test_track_experiment_logs_params_metrics_and_artifact(tmp_path: Path) -> None:
     tracking_uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
     artifact_location = str(tmp_path / "mlruns")
@@ -102,8 +146,51 @@ def test_track_experiment_logs_params_metrics_and_artifact(tmp_path: Path) -> No
     assert run.data.params["cv_n_splits"] == "5"
     assert run.data.metrics["test_rmse"] == pytest.approx(SYNTHETIC_REPORT["test"]["rmse"])
     assert run.data.metrics["cv_rmse_std"] == pytest.approx(SYNTHETIC_REPORT["cv"]["rmse_std"])
+    assert run.data.metrics["train_minus_cv_rmse_gap"] == pytest.approx(
+        SYNTHETIC_REPORT["gap_diagnostics"]["train_minus_cv_rmse"]["gap"]
+    )
+    assert run.data.metrics["gap_reference_rmse_std"] == pytest.approx(
+        SYNTHETIC_REPORT["gap_diagnostics"]["reference_rmse_std"]
+    )
+    assert "train_minus_cv_rmse_within_fold_variability" not in run.data.metrics
+    assert run.data.tags["train_minus_cv_rmse_within_fold_variability"] == "true"
     artifact_paths = [artifact.path for artifact in client.list_artifacts(run_id)]
     assert CANONICAL_MODEL_PATH.name in artifact_paths
+
+
+def test_get_or_create_experiment_recovers_from_concurrent_creation(tmp_path: Path) -> None:
+    concurrent_experiment_id = "42"
+    expected_create_calls = 1
+    expected_lookup_calls = 2
+    duplicate_error = MlflowException("Experiment 'race_experiment' already exists")
+    duplicate_error.error_code = "RESOURCE_ALREADY_EXISTS"
+
+    client = Mock()
+    client.get_experiment_by_name.side_effect = [
+        None,
+        Mock(experiment_id=concurrent_experiment_id),
+    ]
+    client.create_experiment.side_effect = duplicate_error
+
+    experiment_id = _get_or_create_experiment_id(
+        client, "race_experiment", str(tmp_path / "mlruns")
+    )
+
+    assert experiment_id == concurrent_experiment_id
+    assert client.create_experiment.call_count == expected_create_calls
+    assert client.get_experiment_by_name.call_count == expected_lookup_calls
+
+
+def test_get_or_create_experiment_reraises_unexpected_errors(tmp_path: Path) -> None:
+    client = Mock()
+    client.get_experiment_by_name.return_value = None
+    client.create_experiment.side_effect = MlflowException(
+        "backend unavailable",
+        error_code=2,
+    )
+
+    with pytest.raises(MlflowException, match="backend unavailable"):
+        _get_or_create_experiment_id(client, "race_experiment", str(tmp_path / "mlruns"))
 
 
 def test_tracking_preserves_canonical_artifact(tmp_path: Path) -> None:

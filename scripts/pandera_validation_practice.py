@@ -35,6 +35,9 @@ RATING_CATEGORIES: list[int] = [1, 2, 3, 4, 5]
 HALF_STEP_CATEGORIES: list[float] = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
 BINARY_CATEGORIES: list[int] = [0, 1]
 
+TARGET_COLUMN = "Chance of Admit"
+FEATURE_MAX_NULL_FRACTION = 0.10
+
 INVALID_CGPA = 12.5
 
 
@@ -47,12 +50,28 @@ def find_repository_root(start: Path | None = None) -> Path:
     raise FileNotFoundError("Could not find the repository root.")
 
 
+def _feature_null_fractions_within_limit(dataframe: pd.DataFrame) -> bool:
+    """Return whether every feature column has at most 10% nulls."""
+    feature_columns = [column for column in dataframe.columns if column != TARGET_COLUMN]
+    return bool(
+        all(
+            dataframe[column].isna().mean() <= FEATURE_MAX_NULL_FRACTION
+            for column in feature_columns
+        )
+    )
+
+
+def _target_has_no_nulls(dataframe: pd.DataFrame) -> bool:
+    """Return whether the target column has zero missing values."""
+    return bool(not dataframe[TARGET_COLUMN].isna().any())
+
+
 def build_schema() -> pa.DataFrameSchema:
     """Return the Pandera schema that describes the curated feature set.
 
     The rules mirror the production data-validation contract (types, ranges,
-    categories, nullability) without importing or depending on the production
-    validation module.
+    categories, nullability, maximum null fraction and strict columns) without
+    importing or depending on the production validation module.
     """
     return pa.DataFrameSchema(
         {
@@ -63,9 +82,17 @@ def build_schema() -> pa.DataFrameSchema:
             "LOR": pa.Column(float, pa.Check.isin(HALF_STEP_CATEGORIES), nullable=True),
             "CGPA": pa.Column(float, pa.Check.in_range(0.0, 10.0), nullable=True),
             "Research": pa.Column(int, pa.Check.isin(BINARY_CATEGORIES), nullable=True),
-            "Chance of Admit": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=False),
+            TARGET_COLUMN: pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=False),
         },
+        checks=[
+            pa.Check(
+                _feature_null_fractions_within_limit,
+                name="feature_max_null_fraction_10pct",
+            ),
+            pa.Check(_target_has_no_nulls, name="target_no_missing_values"),
+        ],
         coerce=False,
+        strict=True,
     )
 
 
@@ -137,7 +164,11 @@ def main() -> int:
     schema = build_schema()
     print("Pandera schema defined for the curated feature set:")
     print(f"- Columns: {list(schema.columns)}")
-    print("- Checks: types, ranges, categories, nullability (coerce=False).")
+    print(
+        "- Checks: types, ranges, categories, nullability, "
+        f"max {FEATURE_MAX_NULL_FRACTION:.0%} nulls per feature, target complete "
+        "(coerce=False, strict=True)."
+    )
     print()
 
     feature_frame = load_feature_frame(root / Path(*FEATURE_PATH_PARTS))

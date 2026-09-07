@@ -8,6 +8,7 @@ tracked in the repository and is unavailable in CI. The real-data valid case
 is demonstrated by ``scripts/pandera_validation_practice.py`` itself.
 """
 
+import numpy as np
 import pandas as pd
 import pytest
 from pandera.errors import SchemaError, SchemaErrors
@@ -57,3 +58,30 @@ def test_invalid_feature_frame_raises_schema_error(feature_frame: pd.DataFrame) 
 
     with pytest.raises((SchemaError, SchemaErrors)):
         schema.validate(invalid_frame, lazy=True)
+
+
+def test_unexpected_column_fails_validation(feature_frame: pd.DataFrame) -> None:
+    schema = build_schema()
+    frame_with_extra_column = feature_frame.copy()
+    frame_with_extra_column["Extra Column"] = 1
+
+    with pytest.raises((SchemaError, SchemaErrors)):
+        schema.validate(frame_with_extra_column, lazy=True)
+
+
+def test_feature_null_fraction_over_limit_fails_validation(feature_frame: pd.DataFrame) -> None:
+    schema = build_schema()
+    frame_with_excess_nulls = feature_frame.copy()
+    frame_with_excess_nulls.loc[0, "GRE Score"] = pd.NA
+
+    with pytest.raises((SchemaError, SchemaErrors)):
+        schema.validate(frame_with_excess_nulls, lazy=True)
+
+
+def test_target_null_fails_validation(feature_frame: pd.DataFrame) -> None:
+    schema = build_schema()
+    frame_with_null_target = feature_frame.copy()
+    frame_with_null_target.loc[0, "Chance of Admit"] = np.nan
+
+    with pytest.raises((SchemaError, SchemaErrors)):
+        schema.validate(frame_with_null_target, lazy=True)

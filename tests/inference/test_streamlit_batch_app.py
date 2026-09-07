@@ -66,6 +66,36 @@ def test_batch_mode_uploads_predicts_and_offers_download() -> None:
     assert pd.to_numeric(result_frame[PREDICTION_COLUMN]).notna().all()
 
 
+def test_batch_result_survives_streamlit_rerun() -> None:
+    at = run_app()
+    at.tabs[1].file_uploader[0].set_value(("applicants.csv", SAMPLE_BATCH_CSV, "text/csv")).run()
+    at.tabs[1].button[0].click().run()
+
+    assert len(at.tabs[1].dataframe) == 1
+    assert len(at.tabs[1].download_button) == 1
+
+    at.tabs[1].download_button[0].click().run()
+
+    assert not at.exception
+    result_frame = at.tabs[1].dataframe[0].value
+    assert result_frame.columns[-1] == PREDICTION_COLUMN
+    assert len(result_frame) == EXPECTED_BATCH_ROW_COUNT
+    assert len(at.tabs[1].download_button) == 1
+
+
+def test_batch_result_survives_new_upload_before_run() -> None:
+    at = run_app()
+    at.tabs[1].file_uploader[0].set_value(("applicants.csv", SAMPLE_BATCH_CSV, "text/csv")).run()
+    at.tabs[1].button[0].click().run()
+
+    at.tabs[1].file_uploader[0].set_value(("other.csv", MISSING_CGPA_CSV, "text/csv")).run()
+
+    assert not at.exception
+    assert len(at.tabs[1].dataframe) == 1
+    assert at.tabs[1].dataframe[0].value.columns[-1] == PREDICTION_COLUMN
+    assert len(at.tabs[1].download_button) == 1
+
+
 def test_batch_mode_reports_missing_column_error() -> None:
     at = run_app()
     at.tabs[1].file_uploader[0].set_value(("invalid.csv", MISSING_CGPA_CSV, "text/csv")).run()

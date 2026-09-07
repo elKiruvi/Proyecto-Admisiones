@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 
 BATCH_PREVIEW_ROW_LIMIT = 50
 BATCH_DOWNLOAD_FILENAME = "admission_predictions.csv"
+BATCH_RESULT_STATE_KEY = "batch_result"
 
 
 def _ensure_source_root_on_path() -> None:
@@ -107,21 +108,23 @@ with batch_tab:
     if run_batch and uploaded_file is not None:
         try:
             frame = parse_uploaded_csv(uploaded_file.getvalue())
-            result = predict_batch(get_model(), frame)
+            st.session_state[BATCH_RESULT_STATE_KEY] = predict_batch(get_model(), frame)
         except (pd.errors.EmptyDataError, pd.errors.ParserError):
             st.error(
                 "The uploaded file could not be parsed as a CSV file. Check its contents and try again."
             )
         except (FileNotFoundError, TypeError, ValueError) as error:
             st.error(str(error))
-        else:
-            st.success(f"Predictions generated for {len(result)} applicant(s).")
-            st.dataframe(result.head(BATCH_PREVIEW_ROW_LIMIT))
-            if len(result) > BATCH_PREVIEW_ROW_LIMIT:
-                st.caption(f"Showing the first {BATCH_PREVIEW_ROW_LIMIT} rows.")
-            st.download_button(
-                "Download predictions (CSV)",
-                data=predictions_to_csv_bytes(result),
-                file_name=BATCH_DOWNLOAD_FILENAME,
-                mime="text/csv",
-            )
+
+    batch_result: pd.DataFrame | None = st.session_state.get(BATCH_RESULT_STATE_KEY)
+    if batch_result is not None:
+        st.success(f"Predictions generated for {len(batch_result)} applicant(s).")
+        st.dataframe(batch_result.head(BATCH_PREVIEW_ROW_LIMIT))
+        if len(batch_result) > BATCH_PREVIEW_ROW_LIMIT:
+            st.caption(f"Showing the first {BATCH_PREVIEW_ROW_LIMIT} rows.")
+        st.download_button(
+            "Download predictions (CSV)",
+            data=predictions_to_csv_bytes(batch_result),
+            file_name=BATCH_DOWNLOAD_FILENAME,
+            mime="text/csv",
+        )

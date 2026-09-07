@@ -33,6 +33,7 @@ dev = [
     "matplotlib>=3.10", # EDA and model diagnostics plots
     "seaborn>=0.13", # Statistical visualizations
     "scipy>=1.14", # Statistical tests imported directly by notebooks
+    "pandera[pandas]>=0.30.0", # Data validation practice (Unit 9); dev-only, never imported by src/
 ]
 
 #

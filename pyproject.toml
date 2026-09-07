@@ -44,6 +44,7 @@ package = false
 default-groups = [
     "dev",
 ]
+constraint-dependencies = ["virtualenv<21"]
 
 [build-system]
 requires = ["hatchling"]

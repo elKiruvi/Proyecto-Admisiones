@@ -1,0 +1,40 @@
+# Version control and local tooling
+.git
+.github
+.atl
+.vscode
+.devcontainer
+.code_quality
+.pre-commit-config.yaml
+Makefile
+
+# Local environments and caches
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.cache
+
+# Reports and local experiment stores
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+mlflow.db
+mlruns
+
+# Everything else the runtime image does not need
+*.md
+conf
+notebooks
+scripts
+tests
+
+# Data stays out of the build context except the versioned sample input
+# referenced by the batch mode instructions inside the app.
+data/*
+!data/05_model_input
+data/05_model_input/*
+!data/05_model_input/new_applicants.csv

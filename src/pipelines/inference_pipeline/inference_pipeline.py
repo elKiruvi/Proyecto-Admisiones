@@ -37,7 +37,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import BinaryIO, Protocol
 
 import numpy as np
 import pandas as pd
@@ -91,14 +91,24 @@ def default_predictions_output_path() -> Path:
     return _REPOSITORY_ROOT / "data" / "07_model_output" / PREDICTIONS_FILENAME
 
 
+def parse_new_data_csv(source: Path | BinaryIO) -> pd.DataFrame:
+    """Read a new-applicants CSV from a path or file-like source and strip column names.
+
+    Parsing stops at the raw new-data frame: validation and prediction
+    remain separate pipeline steps handled by :func:`validate_inference_input`
+    and :func:`generate_predictions`.
+    """
+    new_data = pd.read_csv(source)
+    new_data.columns = new_data.columns.str.strip()
+    return new_data
+
+
 def read_new_data(input_path: Path) -> pd.DataFrame:
     """Read the new-applicants CSV and strip its column names."""
     if not input_path.is_file():
         raise FileNotFoundError(f"New data file not found: {input_path}")
 
-    new_data = pd.read_csv(input_path)
-    new_data.columns = new_data.columns.str.strip()
-    return new_data
+    return parse_new_data_csv(input_path)
 
 
 def _mangled_duplicate_base(column: str) -> str | None:

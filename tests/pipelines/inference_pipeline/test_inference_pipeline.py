@@ -1,5 +1,6 @@
 """Unit tests for the Graduate Admissions batch inference pipeline."""
 
+from io import BytesIO
 from pathlib import Path
 
 import joblib
@@ -22,6 +23,7 @@ from pipelines.inference_pipeline.inference_pipeline import (
     default_new_data_path,
     default_predictions_output_path,
     generate_predictions,
+    parse_new_data_csv,
     persist_predictions,
     read_new_data,
     run_inference_pipeline,
@@ -145,6 +147,37 @@ def test_read_new_data_loads_frame_and_preserves_nulls(tmp_path: Path) -> None:
 def test_read_new_data_missing_file_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="New data file not found"):
         read_new_data(tmp_path / "missing.csv")
+
+
+def test_parse_new_data_csv_reads_file_like_source(tmp_path: Path) -> None:
+    input_path = write_synthetic_input_csv(tmp_path / "new_applicants.csv")
+    source = BytesIO(input_path.read_bytes())
+
+    frame = parse_new_data_csv(source)
+
+    assert sorted(frame.columns) == sorted(FEATURE_COLUMNS)
+    assert frame.shape == (SYNTHETIC_ROW_COUNT, FEATURE_COUNT)
+
+
+def test_parse_new_data_csv_strips_header_whitespace() -> None:
+    source = BytesIO(
+        b" GRE Score ,TOEFL Score,University Rating,SOP,LOR,CGPA,Research\n"
+        b"316,107,3,3.5,3.0,8.62,1\n"
+    )
+
+    frame = parse_new_data_csv(source)
+
+    assert frame.columns[0] == "GRE Score"
+
+
+def test_parse_new_data_csv_rejects_malformed_source() -> None:
+    with pytest.raises(pd.errors.ParserError):
+        parse_new_data_csv(BytesIO(b'a,b\n"unclosed,2\n'))
+
+
+def test_parse_new_data_csv_rejects_empty_source() -> None:
+    with pytest.raises(pd.errors.EmptyDataError):
+        parse_new_data_csv(BytesIO(b""))
 
 
 def test_validate_inference_input_accepts_valid_frame_with_nulls() -> None:

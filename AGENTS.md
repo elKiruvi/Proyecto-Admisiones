@@ -423,8 +423,11 @@ El artefacto:
 models/05_model_selection_pipeline.joblib
 ```
 
-es producido por el notebook `05.2` y consumido por el código de
-inferencia/demo.
+es producido históricamente por el notebook `05.2` (selección de modelo,
+Work 1) y, desde el Issue #31, también puede ser producido/regenerado por
+el training pipeline (`src/pipelines/training_pipeline/train_pipeline.py`).
+La equivalencia entre ambos productores está verificada por tests. Es
+consumido por el código de inferencia/demo.
 
 No:
 

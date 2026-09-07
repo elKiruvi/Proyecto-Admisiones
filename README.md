@@ -91,6 +91,29 @@ models/05_model_selection_pipeline.joblib
 The artifact-compatible runtime uses Python 3.12 with NumPy 2.5.2, pandas
 3.0.5, scikit-learn 1.9.0, and joblib 1.5.3.
 
+### Deployed application
+
+The public Streamlit Community Cloud deployment of this application is
+available at:
+
+```text
+https://proyecto-admisiones-samuelc.streamlit.app/
+```
+
+It is served from the `main` branch of `elKiruvi/Proyecto-Admisiones` using
+`src/inference/streamlit_app.py` as the main file and Python 3.12, without
+Streamlit secrets. This is the public web interface of the graduate
+admissions regression model.
+
+Task 3 (Work 3) consists of the two modes documented below. The batch mode
+was implemented in Issue #56 / PR #57; Issue #58 documents and evidences the
+public deployment of the complete Task 3. The deployment evidence, including
+the traceability matrix, is recorded at:
+
+```text
+notebooks/7-deploy/streamlit_deployment.md
+```
+
 From the repository root, install the locked environment and launch the local
 app:
 
@@ -104,7 +127,8 @@ Open the local URL printed by Streamlit, normally
 
 ### Online prediction
 
-The **Online prediction** tab accepts GRE Score, TOEFL Score, University
+The **Online prediction** tab provides the web interface for entering a
+single applicant profile. It accepts GRE Score, TOEFL Score, University
 Rating, SOP, LOR, CGPA, and Research. Prediction occurs only after submitting
 the form.
 
@@ -115,8 +139,9 @@ accepted and may represent extrapolation.
 
 ### Batch prediction
 
-The **Batch prediction** tab predicts multiple applicants at once. Upload a
-CSV file with one applicant per row and exactly these columns:
+The **Batch prediction** tab receives multiple applicant records through a
+CSV upload. Upload a CSV file with one applicant per row and exactly these
+columns:
 
 ```text
 GRE Score,TOEFL Score,University Rating,SOP,LOR,CGPA,Research
@@ -128,7 +153,8 @@ A representative sample input is versioned at:
 data/05_model_input/new_applicants.csv
 ```
 
-with its corresponding sample output at:
+with its corresponding sample output generated from the current model
+artifact at:
 
 ```text
 data/07_model_output/admission_predictions.csv
@@ -148,6 +174,8 @@ To use the batch mode:
 
 Invalid files (malformed CSV, missing or unexpected columns, out-of-range or
 out-of-domain values) show a descriptive validation error in the app.
+Validation rejects invalid schemas and invalid domain values before any
+prediction is generated.
 
 ## MLflow Experiment Tracking Practice
 

@@ -1,4 +1,4 @@
-.PHONY: tests help init_env init_git pre-commit_update docs_view docs_test test check
+.PHONY: tests help init_env init_git pre-commit_update docs_view docs_test test check audit
 
 ####----Basic configurations----####
 
@@ -65,6 +65,10 @@ clean_branchs: ## Clean local branches already merged on the remote
 check: ## Run code quality tools with pre-commit hooks.
 	@echo "🚀 Linting, formating and Static type checking code: Running pre-commit"
 	@uv run pre-commit run -a
+
+audit: ## Audit locked dependencies for known vulnerabilities
+	@echo "🚀 Auditing dependencies..."
+	@uv audit --locked
 
 lint: ## Run code quality tools with pre-commit hooks.
 	@echo "🚀 Linting, formating and Static type checking code: Running pre-commit"

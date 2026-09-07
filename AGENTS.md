@@ -426,8 +426,9 @@ models/05_model_selection_pipeline.joblib
 es producido históricamente por el notebook `05.2` (selección de modelo,
 Work 1) y, desde el Issue #31, también puede ser producido/regenerado por
 el training pipeline (`src/pipelines/training_pipeline/train_pipeline.py`).
-Los tests cubren el pipeline de forma independiente y comparan métricas seleccionadas con valores históricos. Es
-consumido por el código de inferencia/demo.
+Los tests cubren el pipeline de forma independiente y comparan métricas
+seleccionadas con valores históricos. Es consumido por el código de
+inferencia/demo.
 
 No:
 

@@ -177,6 +177,40 @@ def test_unexpected_column_is_rejected() -> None:
         validate_inference_input(new_data)
 
 
+def test_duplicate_canonical_column_is_rejected() -> None:
+    new_data = build_synthetic_new_data()
+    new_data.columns = [*list(new_data.columns)[:-1], "GRE Score"]
+
+    with pytest.raises(InferenceInputValidationError, match="duplicated columns"):
+        validate_inference_input(new_data)
+
+
+def test_exact_duplicate_feature_header_is_rejected(tmp_path: Path) -> None:
+    frame = build_synthetic_new_data()
+    frame.columns = [*list(frame.columns)[:-1], "GRE Score"]
+    input_path = tmp_path / "duplicate.csv"
+    frame.to_csv(input_path, index=False)
+
+    with pytest.raises(InferenceInputValidationError, match="duplicated columns"):
+        validate_inference_input(read_new_data(input_path))
+
+
+def test_duplicate_feature_after_whitespace_stripping_is_rejected(tmp_path: Path) -> None:
+    frame = build_synthetic_new_data()
+    frame.columns = [*list(frame.columns)[:-1], " GRE Score"]
+    input_path = tmp_path / "duplicate.csv"
+    frame.to_csv(input_path, index=False)
+
+    with pytest.raises(InferenceInputValidationError, match="duplicated columns"):
+        validate_inference_input(read_new_data(input_path))
+
+
+def test_unique_feature_columns_still_pass(tmp_path: Path) -> None:
+    new_data = read_new_data(write_synthetic_input_csv(tmp_path / "valid.csv"))
+
+    validate_inference_input(new_data)
+
+
 def test_non_numeric_column_is_rejected() -> None:
     new_data = build_synthetic_new_data()
     new_data["CGPA"] = new_data["CGPA"].astype(str)
@@ -219,6 +253,40 @@ def test_empty_frame_is_rejected() -> None:
 
     with pytest.raises(InferenceInputValidationError, match="empty"):
         validate_inference_input(new_data)
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ("GRE Score", 316.5),
+        ("TOEFL Score", 107.25),
+    ],
+)
+def test_fractional_integer_feature_is_rejected(column: str, value: float) -> None:
+    new_data = build_synthetic_new_data()
+    new_data[column] = new_data[column].astype(float)
+    new_data.loc[0, column] = value
+
+    with pytest.raises(InferenceInputValidationError, match="integer-valued"):
+        validate_inference_input(new_data)
+
+
+def test_float_dtype_integer_valued_features_are_accepted() -> None:
+    new_data = build_synthetic_new_data()
+    new_data["GRE Score"] = new_data["GRE Score"].astype(float)
+    new_data["TOEFL Score"] = new_data["TOEFL Score"].astype(float)
+
+    validate_inference_input(new_data)
+
+
+def test_null_integer_valued_features_are_accepted() -> None:
+    new_data = build_synthetic_new_data()
+    new_data["GRE Score"] = new_data["GRE Score"].astype(float)
+    new_data["TOEFL Score"] = new_data["TOEFL Score"].astype(float)
+    new_data.loc[1, "GRE Score"] = np.nan
+    new_data.loc[2, "TOEFL Score"] = np.nan
+
+    validate_inference_input(new_data)
 
 
 def test_generate_predictions_calls_predict_once_and_never_fit() -> None:

@@ -14,8 +14,11 @@ Transformation contract (Issue #34)
 - The model artifact is only ever loaded read-only; it is never
   modified, refit or re-serialized.
 - New data is expected to contain exactly the canonical feature columns
-  (no target). Missing values are allowed and are handled by the
-  artifact's imputers.
+  (no target): duplicates (including duplicates created by whitespace
+  stripping and pandas-mangled duplicate headers) are rejected. Missing
+  values are allowed and are handled by the artifact's imputers.
+- Integer-valued feature columns (GRE Score, TOEFL Score, University
+  Rating, Research) must contain integer-valued non-null values.
 - Predictions are raw regression estimates: they are not clipped,
   calibrated or converted to percentages.
 
@@ -49,6 +52,7 @@ from pipelines.feature_pipeline.feature_pipeline import (  # noqa: E402
     CATEGORICAL_DOMAINS,
     CONTINUOUS_RANGES,
     FEATURE_COLUMNS,
+    INTEGER_COLUMNS,
 )
 from pipelines.inference_pipeline.inference import (  # noqa: E402
     default_model_path,
@@ -97,14 +101,47 @@ def read_new_data(input_path: Path) -> pd.DataFrame:
     return new_data
 
 
+def _mangled_duplicate_base(column: str) -> str | None:
+    """Return the canonical feature name of a pandas-mangled duplicate header.
+
+    pandas 3 renames exact duplicate CSV header names by appending a
+    numeric suffix (``GRE Score`` → ``GRE Score.1``); those mangled
+    names are preserved by the new-data layer, so duplicates of this
+    form are detected from the parsed column labels.
+    """
+    canonical_features: tuple[str, ...] = FEATURE_COLUMNS
+    for feature in canonical_features:
+        suffix = column.removeprefix(f"{feature}.")
+        if suffix and suffix.isdigit():
+            return feature
+    return None
+
+
 def _check_schema(new_data: pd.DataFrame) -> list[str]:
-    """Return failures about missing or unexpected feature columns."""
-    expected_columns = list(FEATURE_COLUMNS)
+    """Return failures about missing, unexpected or duplicated feature columns."""
     actual_columns = list(new_data.columns)
-    missing_columns = [column for column in expected_columns if column not in actual_columns]
-    unexpected_columns = [column for column in actual_columns if column not in expected_columns]
-    if missing_columns or unexpected_columns:
+    duplicated_columns = sorted(
+        column for column in FEATURE_COLUMNS if actual_columns.count(column) > 1
+    )
+    duplicated_columns.extend(
+        sorted(
+            base
+            for column in actual_columns
+            if column not in FEATURE_COLUMNS
+            if (base := _mangled_duplicate_base(column)) is not None
+        )
+    )
+    duplicated_columns = sorted(set(duplicated_columns))
+    missing_columns = [column for column in FEATURE_COLUMNS if column not in actual_columns]
+    unexpected_columns = [
+        column
+        for column in actual_columns
+        if column not in FEATURE_COLUMNS and _mangled_duplicate_base(column) is None
+    ]
+    if missing_columns or unexpected_columns or duplicated_columns:
         details = []
+        if duplicated_columns:
+            details.append(f"duplicated columns: {duplicated_columns}")
         if missing_columns:
             details.append(f"missing columns: {missing_columns}")
         if unexpected_columns:
@@ -113,24 +150,74 @@ def _check_schema(new_data: pd.DataFrame) -> list[str]:
     return []
 
 
+def _column_has_duplicates(new_data: pd.DataFrame, column: str) -> bool:
+    """Return whether ``column`` appears more than once in the frame.
+
+    Indexing a duplicated label returns a DataFrame instead of a Series,
+    so dtype and value checks must skip it: the schema check already
+    reported the duplicate.
+    """
+    return list(new_data.columns).count(column) > 1
+
+
 def _check_dtypes(new_data: pd.DataFrame) -> list[str]:
     """Return failures about non-numeric feature columns."""
     failures: list[str] = []
     for column in FEATURE_COLUMNS:
+        if _column_has_duplicates(new_data, column):
+            continue
         if column in new_data.columns and not pd.api.types.is_numeric_dtype(new_data[column].dtype):
             failures.append(f"{column}: expected numeric dtype, found {new_data[column].dtype}.")
     return failures
+
+
+def _integer_value_failures(column: str, values: pd.Series) -> list[str]:
+    """Return failures about fractional values in integer-valued columns."""
+    if column not in INTEGER_COLUMNS:
+        return []
+    fractional = values[values % 1 != 0]
+    if fractional.empty:
+        return []
+    sample = sorted(set(fractional.tolist()))[:OFFENDING_VALUE_SAMPLE_LIMIT]
+    return [f"{column}: values {sample} are not integer-valued."]
+
+
+def _range_failures(column: str, values: pd.Series) -> list[str]:
+    """Return failures about values outside the documented specification range."""
+    if column not in FEATURE_CONTINUOUS_RANGES:
+        return []
+    lower_bound, upper_bound = FEATURE_CONTINUOUS_RANGES[column]
+    outside = values[(values < lower_bound) | (values > upper_bound)]
+    if outside.empty:
+        return []
+    sample = sorted(set(outside.tolist()))[:OFFENDING_VALUE_SAMPLE_LIMIT]
+    return [f"{column}: values {sample} outside range [{lower_bound:g}, {upper_bound:g}]."]
+
+
+def _category_failures(column: str, values: pd.Series) -> list[str]:
+    """Return failures about values outside the allowed categorical domain."""
+    if column not in CATEGORICAL_DOMAINS:
+        return []
+    allowed_categories = CATEGORICAL_DOMAINS[column]
+    outside = values[~values.isin(allowed_categories)]
+    if outside.empty:
+        return []
+    sample = sorted(set(outside.tolist()))[:OFFENDING_VALUE_SAMPLE_LIMIT]
+    return [f"{column}: values {sample} outside allowed categories {sorted(allowed_categories)}."]
 
 
 def _check_values(new_data: pd.DataFrame) -> list[str]:
     """Return failures about non-finite, out-of-range or out-of-domain values.
 
     Missing values are skipped: the artifact's imputers handle them.
-    Columns whose dtype violates the contract are skipped too: their
-    failure was already reported by :func:`_check_dtypes`.
+    Columns whose label is duplicated or whose dtype violates the
+    contract are skipped too: their failure was already reported by
+    :func:`_check_schema` or :func:`_check_dtypes`.
     """
     failures: list[str] = []
     for column in FEATURE_COLUMNS:
+        if _column_has_duplicates(new_data, column):
+            continue
         if column not in new_data.columns:
             continue
         if not pd.api.types.is_numeric_dtype(new_data[column].dtype):
@@ -141,23 +228,12 @@ def _check_values(new_data: pd.DataFrame) -> list[str]:
         if not np.isfinite(values).all():
             failures.append(f"{column}: found non-finite values.")
             continue
-        if column in FEATURE_CONTINUOUS_RANGES:
-            lower_bound, upper_bound = FEATURE_CONTINUOUS_RANGES[column]
-            outside = values[(values < lower_bound) | (values > upper_bound)]
-            if not outside.empty:
-                sample = sorted(set(outside.tolist()))[:OFFENDING_VALUE_SAMPLE_LIMIT]
-                failures.append(
-                    f"{column}: values {sample} outside range [{lower_bound:g}, {upper_bound:g}]."
-                )
-        if column in CATEGORICAL_DOMAINS:
-            allowed_categories = CATEGORICAL_DOMAINS[column]
-            outside = values[~values.isin(allowed_categories)]
-            if not outside.empty:
-                sample = sorted(set(outside.tolist()))[:OFFENDING_VALUE_SAMPLE_LIMIT]
-                failures.append(
-                    f"{column}: values {sample} outside allowed categories "
-                    f"{sorted(allowed_categories)}."
-                )
+        integer_failures = _integer_value_failures(column, values)
+        failures.extend(integer_failures)
+        if integer_failures:
+            continue
+        failures.extend(_range_failures(column, values))
+        failures.extend(_category_failures(column, values))
     return failures
 
 
